@@ -1,0 +1,8 @@
+---
+title: "capstone_variablecreation"
+author: "Laura Olson"
+date: "May 20, 2017"
+output: html_document
+---
+
+#variablecreation
