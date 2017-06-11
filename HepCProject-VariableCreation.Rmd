@@ -5,4 +5,23 @@ date: "May 20, 2017"
 output: html_document
 ---
 
-#variablecreation
+#Segment patients with hep c at first encounter vs. after
+
+```{r}
+patients_exclude <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "FALSE")
+```
+
+#Create table patients
+
+```{r}
+library(dplyr)
+patients <- left_join(merge_10,hep_c_icd_dx)
+patients$HCV_STATUS <- ifelse(is.null(patients$icd_dx)=="TRUE",0,1)
+patients <- anti_join(patients,patients_exclude)
+names(patients)
+patients <- patients[,c(1,19)]
+names(patients)
+
+
+```
+
