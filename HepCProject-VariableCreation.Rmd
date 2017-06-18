@@ -8,20 +8,120 @@ output: html_document
 #Segment patients with hep c at first encounter vs. after
 
 ```{r}
-patients_exclude <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "FALSE")
+patients_exclude <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "FALSE")#exclude patients whose first encounter date was = to first Hep C icd code
 ```
 
 #Create table patients
 
 ```{r}
+
 library(dplyr)
 patients <- left_join(merge_10,hep_c_icd_dx)
 patients$HCV_STATUS <- ifelse(is.null(patients$icd_dx)=="TRUE",0,1)
 patients <- anti_join(patients,patients_exclude)
 names(patients)
-patients <- patients[,c(1,19)]
-names(patients)
+patients <- patients[,c(19,1)]
 
-
+dim(patients)
 ```
 
+```{r}
+#######Demo Varialbes#####
+
+patients <- left_join(patients, demo) #add demographics
+names(patients)
+str(patients)
+
+levels(patients$language)
+
+patients <- patients[,c("HCV_STATUS", "PATIENT_ID", "DOB_DS", "Gender", "Race", "Ethnicity", "language", "Marital_Status",      "DOD_DS")] #reducing down the columns
+
+names(patients)[c(3:9)] <- c("DOB","GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS", "DOD") #rename columns
+table(patients$MARITAL_STATUS)
+
+## reduce levels to 2
+levels(patients$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
+"Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
+"Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English") #reducing language to 2 factors
+
+#reduce levels to 4
+levels(patients$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "Unknown", "Divorced_Separated", 
+                                     "Divorced_Separated", "Unknown", "Unknown", "Unknown", 
+                                     "Unknown", "Divorced_Separated", "Divorced_Separated", "Unknown", 
+                                     "Unknown", "Married_Committed", "Unknown", "Unknown", 
+                                     "Married_Committed", "Unknown", "Unknown", "Unknown",
+                                     "Unknown", "Unknown", "Single", "Unknown", 
+                                     "Unknown", "Unknown", "Unknown", "Unknown",
+                                     "Unknown", "Unknown", "Unknown", "Unknown",
+                                    "Widowed", "Unknown", "Unknown", "Unknown", 
+                                    "Unknown", "Unknown")
+```
+
+```{r}
+
+#####  Social History Variables ####
+
+str(social_hx)
+names(social_hx)
+
+sum(length(unique(social_hx$PATIENT_ID)))
+#tobacco - past, current, never,
+
+tobacco <- social_hx[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "Enc_DT_DS", "TOBACCO_USER", "SMOKING_TOB_USE", "TOBACCO_PAK_PER_DY", "TOBACCO_USED_YEARS", "SMOKING_START_DATE_DS", "SMOKING_QUIT_DATE_DS", "CIGARETTES_YN", "PIPES_YN", "CIGARS_YN", "SMOKELESS_TOB_USE_C", "SMOKELESS_TOB_USE", "SNUFF_YN", "CHEW_YN", "SMOKELESS_QUIT_DATE_DS")]
+
+#finding first social hx based on encounter date
+pts_first_social_hx <- aggregate(Enc_DT_DS~PATIENT_ID,  data = tobacco, min)
+dim(pts_first_social_hx)
+sum(nrow(unique(pts_first_social_hx)))
+
+#bringing in only the first social hx encounters
+tobacco_first_encounter <- left_join(pts_first_social_hx, tobacco, by=c("PATIENT_ID", "Enc_DT_DS"))
+
+#removing duplicate rows
+unduplicated <-tobacco_first_encounter[!duplicated(tobacco_first_encounter),]
+sum(length(unique(unduplicated$PATIENT_ID)))
+dim(unduplicated)
+
+duplicates <- unduplicated[duplicated(unduplicated$PATIENT_ID),]
+View(duplicates[order(duplicates$PATIENT_ID),])
+View(duplicates)
+
+
+#Evaluating tobacco data
+smoking <- social_hx[c("TOBACCO_USER", "SMOKING_TOB_USE", "TOBACCO_PAK_PER_DY", "TOBACCO_USED_YEARS", "SMOKING_QUIT_DATE_DS", "CIGARETTES_YN", "PIPES_YN", "CIGARS_YN")]
+tob <- subset(smoking, (CIGARETTES_YN == "Y" & TOBACCO_USER == "Never") | (CIGARETTES_YN == "Y" & TOBACCO_USER == "Never") | (PIPES_YN== "Y" & TOBACCO_USER == "CIGARS_YN"))
+View(tob)
+tob$TOBACCO_USED_YEARS
+unique(tob$TOBACCO_USED_YEARS)
+sum(nrow(subset(tobacco, PIPES_YN == "Y" & TOBACCO_USER == "Yes")))
+sum(nrow(subset(tobacco, PIPES_YN == "Y" & TOBACCO_USER == "Never")))
+```
+
+```{r}
+
+
+str(diagnosis_icd)
+
+icd_code_freq <- head(diagnosis_icd, n=50)
+str(icd_code_freq)
+names(icd_code_freq)
+
+icd_code_freq$icd_dx
+table(icd_code_freq$icd_dx)
+unique(icd_code_freq$icd_dx)
+head(icd_code_freq)
+dim(icd_code_freq)
+
+dummies = model.matrix(~icd_code_freq$icd_dx)
+A <- model.matrix(PATIENT_ID ~ icd_dx, icd_code_freq) 
+head(A)
+
+library(dummies)
+
+# example data
+df1 <- data.frame(id = icd_code_freq$PATIENT_ID, icd_code = icd_code_freq$icd_dx)
+head(df1)
+df1 <- cbind(df1$id, dummy(df1$icd_code, sep = "_"))
+dim(df1)
+names(df1)
+```
