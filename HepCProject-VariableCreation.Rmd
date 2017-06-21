@@ -7,45 +7,66 @@ output: html_document
 
 #Segment patients with hep c at first encounter vs. after
 
-```{r}
-patients_exclude <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "FALSE")#exclude patients whose first encounter date was = to first Hep C icd code
-```
-
 #Create table patients
 
 ```{r}
 
 library(dplyr)
-patients <- left_join(merge_10,hep_c_icd_dx)
-patients$HCV_STATUS <- ifelse(is.null(patients$icd_dx)=="TRUE",0,1)
-patients <- anti_join(patients,patients_exclude)
-names(patients)
-patients <- patients[,c(19,1)]
+
+#exclude patients whose first encounter date was = to first Hep C icd code
+patients_include <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "TRUE")
+
+#merge table with all unique patient ID's with the patients with a hep c diagnosis
+patients <- left_join(merge_10,patients_include)
+
+#Add column to identify as hep c = 1 and non hep c = 1
+patients$HCV_STATUS <- ifelse(is.na(patients$First_Date_with_Hep_C_ICD_code),0,1)
+
+#reduce to only patient ID and HCV status
+patients <- patients[,c(1, 14, 16)]
 
 dim(patients)
+str(patients)
+
+#double check - should be 2485
+nrow(subset(patients, HCV_STATUS ==1))
+
+####NOT WORKING3###
+#change date NA's to 12/31/9999 
+patients[is.na(patients$First_Date_with_Hep_C_ICD_code),] <- as.Date("12-31-9999")
 ```
 
 ```{r}
 #######Demo Varialbes#####
 
-patients <- left_join(patients, demo) #add demographics
-names(patients)
-str(patients)
+#merge patient id's with demo table
 
-levels(patients$language)
+dim(demo)
+dim(patients)
+pts_demo <- left_join(patients, demo) #add demographics
+dim(pts_demo)
 
-patients <- patients[,c("HCV_STATUS", "PATIENT_ID", "DOB_DS", "Gender", "Race", "Ethnicity", "language", "Marital_Status",      "DOD_DS")] #reducing down the columns
+str(pts_demo)
 
-names(patients)[c(3:9)] <- c("DOB","GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS", "DOD") #rename columns
-table(patients$MARITAL_STATUS)
 
-## reduce levels to 2
-levels(patients$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
+pts_demo <- pts_demo[,c( "PATIENT_ID", "HCV_STATUS", "DOB_DS", "Gender", "Race", "Ethnicity", "language", "Marital_Status",      "DOD_DS")] #reducing down the columns
+names(pts_demo)[c(3:9)] <- c("DOB","GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS", "DOD") #rename columns
+
+
+## DOB ##
+
+
+## reduce Language levels to 2
+
+levels(pts_demo$language)
+
+levels(pts_demo$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
 "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
 "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English") #reducing language to 2 factors
 
-#reduce levels to 4
-levels(patients$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "Unknown", "Divorced_Separated", 
+#reduce Marital Status levels to 4
+
+levels(pts_demo$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "Unknown", "Divorced_Separated", 
                                      "Divorced_Separated", "Unknown", "Unknown", "Unknown", 
                                      "Unknown", "Divorced_Separated", "Divorced_Separated", "Unknown", 
                                      "Unknown", "Married_Committed", "Unknown", "Unknown", 
@@ -61,13 +82,28 @@ levels(patients$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "
 
 #####  Social History Variables ####
 
-str(social_hx)
-names(social_hx)
+#merge patient id's with social history table
 
-sum(length(unique(social_hx$PATIENT_ID)))
-#tobacco - past, current, never,
+dim(social_hx)
+dim(patients)
+pts_social <- left_join(patients, social_hx) #add demographics
+dim(pts_social)
+
+str(pts_social)
+
+#remove observations after First_Date_with_Hep_C_ICD_code
+pts_social$BeforeorAfter <-ifelse(is.na(pts_social$First_Date_with_Hep_C_ICD_code), 1,
+                                        ifelse(pts_social$First_Date_with_Hep_C_ICD_code < pts_social$First_Date_with_Hep_C_ICD_code, 0, 1))
+
+subset(pts_social, BeforeorAfter == 0)
+
+pts_social <- pts_social[(pts_social$BeforeorAfter == 1),]
+
+#tobacco - past, current, never
 
 tobacco <- social_hx[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "Enc_DT_DS", "TOBACCO_USER", "SMOKING_TOB_USE", "TOBACCO_PAK_PER_DY", "TOBACCO_USED_YEARS", "SMOKING_START_DATE_DS", "SMOKING_QUIT_DATE_DS", "CIGARETTES_YN", "PIPES_YN", "CIGARS_YN", "SMOKELESS_TOB_USE_C", "SMOKELESS_TOB_USE", "SNUFF_YN", "CHEW_YN", "SMOKELESS_QUIT_DATE_DS")]
+names(tobacco) 
+levels(tobacco$TOBACCO_USER)
 
 #finding first social hx based on encounter date
 pts_first_social_hx <- aggregate(Enc_DT_DS~PATIENT_ID,  data = tobacco, min)
@@ -98,8 +134,6 @@ sum(nrow(subset(tobacco, PIPES_YN == "Y" & TOBACCO_USER == "Never")))
 ```
 
 ```{r}
-
-
 str(diagnosis_icd)
 
 icd_code_freq <- head(diagnosis_icd, n=50)
