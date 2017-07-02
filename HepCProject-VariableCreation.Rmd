@@ -13,7 +13,7 @@ output: html_document
 
 library(dplyr)
 
-#exclude patients whose first encounter date was = to first Hep C icd code
+#include patients whose first encounter date was = to first Hep C icd code
 patients_include <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "TRUE")
 
 #merge table with all unique patient ID's with the patients with a hep c diagnosis
@@ -23,10 +23,11 @@ patients <- left_join(merge_10,patients_include)
 patients$HCV_STATUS <- ifelse(is.na(patients$First_Date_with_Hep_C_ICD_code),0,1)
 
 #reduce to only patient ID and HCV status
-patients <- patients[,c(1, 14, 16)]
+patients <- patients[,c(1, 13, 14, 16)]
 
 dim(patients)
 str(patients)
+
 
 #double check - should be 2485
 nrow(subset(patients, HCV_STATUS ==1))
@@ -52,9 +53,9 @@ str(pts_demo)
 pts_demo <- pts_demo[,c( "PATIENT_ID", "HCV_STATUS", "DOB_DS", "Gender", "Race", "Ethnicity", "language", "Marital_Status",      "DOD_DS")] #reducing down the columns
 names(pts_demo)[c(3:9)] <- c("DOB","GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS", "DOD") #rename columns
 
-
+library(eeptools)
 ## DOB ##
-
+pts_demo$age_T0 <- age_calc(dob = DOB, enddate = , units = "years")
 
 ## reduce Language levels to 2
 
@@ -93,69 +94,146 @@ str(pts_social)
 
 #remove observations after First_Date_with_Hep_C_ICD_code
 pts_social$BeforeorAfter <-ifelse(is.na(pts_social$First_Date_with_Hep_C_ICD_code), 1,
-                                        ifelse(pts_social$First_Date_with_Hep_C_ICD_code < pts_social$First_Date_with_Hep_C_ICD_code, 0, 1))
+                                        ifelse(pts_social$First_Date_with_Hep_C_ICD_code < pts_social$Enc_DT_DS, 0, 1))
 
-subset(pts_social, BeforeorAfter == 0)
+nrow(subset(pts_social, BeforeorAfter == 0))
+nrow(subset(pts_social, is.na(BeforeorAfter)))
+nrow(subset(pts_social, BeforeorAfter == 1))
 
-pts_social <- pts_social[(pts_social$BeforeorAfter == 1),]
+pts_social <- subset(pts_social, BeforeorAfter == 1)
 
-#tobacco - past, current, never
-
-tobacco <- social_hx[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "Enc_DT_DS", "TOBACCO_USER", "SMOKING_TOB_USE", "TOBACCO_PAK_PER_DY", "TOBACCO_USED_YEARS", "SMOKING_START_DATE_DS", "SMOKING_QUIT_DATE_DS", "CIGARETTES_YN", "PIPES_YN", "CIGARS_YN", "SMOKELESS_TOB_USE_C", "SMOKELESS_TOB_USE", "SNUFF_YN", "CHEW_YN", "SMOKELESS_QUIT_DATE_DS")]
-names(tobacco) 
-levels(tobacco$TOBACCO_USER)
-
-#finding first social hx based on encounter date
-pts_first_social_hx <- aggregate(Enc_DT_DS~PATIENT_ID,  data = tobacco, min)
-dim(pts_first_social_hx)
-sum(nrow(unique(pts_first_social_hx)))
-
-#bringing in only the first social hx encounters
-tobacco_first_encounter <- left_join(pts_first_social_hx, tobacco, by=c("PATIENT_ID", "Enc_DT_DS"))
-
-#removing duplicate rows
-unduplicated <-tobacco_first_encounter[!duplicated(tobacco_first_encounter),]
-sum(length(unique(unduplicated$PATIENT_ID)))
-dim(unduplicated)
-
-duplicates <- unduplicated[duplicated(unduplicated$PATIENT_ID),]
-View(duplicates[order(duplicates$PATIENT_ID),])
-View(duplicates)
+#remove duplicated rows
+pts_social <- pts_social[!duplicated(pts_social),]
 
 
-#Evaluating tobacco data
-smoking <- social_hx[c("TOBACCO_USER", "SMOKING_TOB_USE", "TOBACCO_PAK_PER_DY", "TOBACCO_USED_YEARS", "SMOKING_QUIT_DATE_DS", "CIGARETTES_YN", "PIPES_YN", "CIGARS_YN")]
-tob <- subset(smoking, (CIGARETTES_YN == "Y" & TOBACCO_USER == "Never") | (CIGARETTES_YN == "Y" & TOBACCO_USER == "Never") | (PIPES_YN== "Y" & TOBACCO_USER == "CIGARS_YN"))
-View(tob)
-tob$TOBACCO_USED_YEARS
-unique(tob$TOBACCO_USED_YEARS)
-sum(nrow(subset(tobacco, PIPES_YN == "Y" & TOBACCO_USER == "Yes")))
-sum(nrow(subset(tobacco, PIPES_YN == "Y" & TOBACCO_USER == "Never")))
+##### Tobacco ####
+#Recoding the Tobacco User status variable -
+
+
+#NA = 0
+#0 = "Not Asked"
+#1 = "Never"
+#1 = "Passive"
+#2 = "Quit"
+#2 = "Yes"
+levels(pts_social$TOBACCO_USER) <- c("1", "0", "1", "2", "2")
+pts_social$TOBACCO_USER[is.na(pts_social$TOBACCO_USER)] <- "0"
+table(pts_social$TOBACCO_USER)
+
+pts_social$TOBACCO_USER <- as.numeric(as.character(pts_social$TOBACCO_USER))
+
+#find max status of tobacco
+#change formatting of object to factor
+pts_max_status <- aggregate(TOBACCO_USER~PATIENT_ID,  data = pts_social, max)
+colnames(pts_max_status) <- c("PATIENT_ID", "TOBACCO_USE_STATUS")
+pts_max_status$TOBACCO_USE_STATUS<-as.factor(pts_max_status$TOBACCO_USE_STATUS)
+levels(pts_max_status$TOBACCO_USE_STATUS) <- c("Unknown", "Never", "Ever")
+
+head(pts_max_status)
+dim(pts_max_status)
+str(pts_max_status)
+
+
+### Figure out a tobacco intensity variable????????????? ####
+
+##### Alcohol ####
+sum(is.na(pts_social$ALCOHOL_USE_C))
+`levels<-`(addNA(pts_social$ALCOHOL_USE), c(levels(pts_social$ALCOHOL_USE), "Unknown"))
+pts_social$ALCOHOL_USE[is.na(pts_social$ALCOHOL_USE_C)] <- "0"
+table(pts_social$ALCOHOL_USE)
+levels(pts_social$ALCOHOL_USE_C)
+pts_social$ALCOHOL_USE <- as.numeric(as.character(pts_social$ALCOHOL_USE))
+
+pts_social$ALCOHOL_USE <- as.numeric(as.character(pts_social$ALCOHOL_USE))
+df[is.na(df$a),1] <- 88
+df$a <- as.factor(df$a)
+
+
+
+
 ```
 
 ```{r}
-str(diagnosis_icd)
 
-icd_code_freq <- head(diagnosis_icd, n=50)
-str(icd_code_freq)
-names(icd_code_freq)
+######ICD Diagnosis Codes Table#########
 
-icd_code_freq$icd_dx
-table(icd_code_freq$icd_dx)
-unique(icd_code_freq$icd_dx)
-head(icd_code_freq)
-dim(icd_code_freq)
+###import value sets
+Value_Sets<- read.csv("Z:/Hepatitis C Project/Value Sets/Value Sets.csv", header = TRUE, stringsAsFactor = FALSE)
+str(Value_Sets)
 
-dummies = model.matrix(~icd_code_freq$icd_dx)
-A <- model.matrix(PATIENT_ID ~ icd_dx, icd_code_freq) 
-head(A)
+#filter on certain categaries
+reduced_value_sets <- Values_Set %>%
+                        filter(Value_Set_Name == "Sexual Activity", Code_System == ICD10PCS, ICD9PCS, ICD10CM, ICD9CM, HCPCS
+)
+
+#Create table with 1/0's for icd codes
 
 library(dummies)
 
+dim(diagnosis_icd)
+dim(patients)
+pts_diagnosis <- left_join(patients, diagnosis_icd) #add demographics
+dim(pts_diagnosis)
+
+str(pts_diagnosis)
+
+#remove observations after First_Date_with_Hep_C_ICD_code
+pts_diagnosis$BeforeorAfter <-ifelse(is.na(pts_diagnosis$First_Date_with_Hep_C_ICD_code), 1,
+                                        ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code < pts_diagnosis$Enc_DT_DS, 0, 1))
+
+#remove observations that occurred after Hep C diagnosis
+pts_diagnosis <- pts_diagnosis[(pts_diagnosis$BeforeorAfter == 1),]
+
+patient_icd_codes <- pts_diagnosis[c(1,7)]
+str(patient_icd_codes)
+
+
+dummy(sexual_codes,drop=T)
+?dummy.data.frame
+
+model.matrix(PATIENT_ID ~icd_dx - 1, data = sexual_codes)
+model.matrix(~ icd_dx - 1, sexual_codes) 
+head(dummies)
+
+for (levels in unique(sexual_codes$icd_dx)) {
+  sexual_codes[paste("Code", levels, sep = "")] <- ifelse(sexual_codes$icd_dx == levels, 1, 0)
+}
+
+?model.matrix
 # example data
 df1 <- data.frame(id = icd_code_freq$PATIENT_ID, icd_code = icd_code_freq$icd_dx)
 head(df1)
 df1 <- cbind(df1$id, dummy(df1$icd_code, sep = "_"))
 dim(df1)
 names(df1)
+
+
+
+#Create table with frequency of icd codes
+
+
+
+#####  Code for single icd factor level ###
+icd_078.11_freq <- as.data.frame(filter(sexual_codes, icd_dx == "078.11") %>%
+  count(PATIENT_ID))
+colnames(icd_078.11_freq) <- c("PATIENT_ID", "icd_078.11_freq")
+g
+patients <- left_join(patients, icd_078.11_freq)
+patients$icd_078.11_freq[is.na(patients$icd_078.11_freq)] <- 0
+  
+icd_codes <- unique(sexual_codes$icd_dx)
+icd_codes <- levels(droplevels(icd_codes))
+str(icd_codes)
+  
+for(x in levels(icd_codes)) { 
+a <- as.data.frame(filter(sexual_codes, icd_dx == "x") %>%
+  count(PATIENT_ID))  #filters by specific icd_dx level and counts the number of times a specific patient has that icd code
+colnames(a) <- c("PATIENT_ID", paste("icd_", x, "_freq")) #renames the data.frame columans
+
+patients <- left_join(patients, a) #joins with full id dataset
+}
+  
+icd_freq_variable <- names(patients[5:12000])
+for(x in levels(icd_freq_variable))
+patients$x <- if(patients$x == 0, 0, 1))#need to find a way to name it
 ```
