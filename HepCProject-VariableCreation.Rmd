@@ -674,3 +674,38 @@ rownames(cpt_freq_table) <- NULL
 cpt_freq_table <- cpt_freq_table[c(107, 1:106)]
 ```
 
+```{r}
+#Laura's Encounter Variables
+encounters_first_hep_c_encounter <- left_join(encounters,patients)
+encounters_first_hep_c_encounter$before_diagnosis <- ifelse(encounters_first_hep_c_encounter$Enc_DT_DS < encounters_first_hep_c_encounter$First_Date_with_Hep_C_ICD_code, "TRUE", "FALSE")
+
+#Total_Num_Encounters
+patient_ID_encounters <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_Encounters = length(PATIENT_ID[before_diagnosis == "TRUE"]))
+patients <- left_join(patients,patient_ID_encounters)
+
+#Total_Num_Outpt_Visits
+patient_ID_encounters_outpt <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_Outpt_Visits = length(PATIENT_ID[Enc_EIO %in% c("O", "I, O", "E, O", "E, I, O") & before_diagnosis == "TRUE"]))
+patients <- left_join(patients,patient_ID_encounters_outpt)
+
+#Total_Num_Inpt_Admissions
+patient_ID_encounters_inpt <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_Inpt_Admissions = length(PATIENT_ID[Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I") & before_diagnosis == "TRUE"]))
+patients <- left_join(patients,patient_ID_encounters_inpt)
+
+#Average_LOS
+patient_ID_inpt_days <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Days = sum(LOS_Days[Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I") & before_diagnosis == "TRUE"]))
+patients <- left_join(patients,patient_ID_inpt_days)
+patients$Average_LOS <- patients$patient_ID_inpt_days/patients$Total_Num_Inpt_Admissions
+
+#Total_Num_ED_Visits
+patient_ID_encounters_ED <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_ED_Visits = length(PATIENT_ID[Enc_EIO %in% c("E, I", "E", "E, I, O", "E, O") & before_diagnosis == "TRUE"]))
+patients <- left_join(patients,patient_ID_encounters_ED)
+unique(encounters$Enc_EIO)
+
+#Num_Specialty_Docs
+
+
+#Insurance_Status_History
+patient_ID_insurancecount <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, InsuranceCount = length(PATIENT_ID[!is.na(Fin_Class) & before_diagnosis == "TRUE"]))
+
+```
+
