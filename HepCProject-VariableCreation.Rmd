@@ -473,87 +473,204 @@ patients$ALCOHOL_OZ_PER_WK_FCR[is.na(patients$ALCOHOL_OZ_PER_WK_FCR)] <- 0
 
 ```
 
+
 ```{r}
 
 ######ICD Diagnosis Codes Table#########
 
 ###import value sets
-Value_Sets<- read.csv("Z:/Hepatitis C Project/Value Sets/Value Sets.csv", header = TRUE, stringsAsFactor = FALSE)
-str(Value_Sets)
+value_sets <- read.csv("Z:/Value Sets/Value_Sets.csv", header = TRUE, stringsAsFactor = FALSE)
 
-#filter on certain categaries
-reduced_value_sets <- Values_Set %>%
-                        filter(Value_Set_Name == "Sexual Activity", Code_System == ICD10PCS, ICD9PCS, ICD10CM, ICD9CM, HCPCS
-)
+value_sets$Value_Set_Name<-as.factor(value_sets$Value_Set_Name)
+value_sets$Code<-as.factor(value_sets$Code)
+value_sets$Definition<-as.factor(value_sets$Definition)
+value_sets$Code_System<-as.factor(value_sets$Code_System)
 
-#Create table with 1/0's for icd codes
+str(value_sets)
 
-library(dummies)
+#reduce value sets to releveant sets and remove duplicate icd codes
+reduced_value_sets <- value_sets %>%
+                          filter(Value_Set_Name == "AOD Dependence" |
+                                Value_Set_Name == "AOD Procedures" |
+                                Value_Set_Name == "AOD Rehab and Detox" |
+                                Value_Set_Name == "Chemical  Dependency" |
+                                Value_Set_Name == "Chlamydia Tests" |
+                                Value_Set_Name == "Hepatitis A" |
+                                Value_Set_Name == "Hepatitis B" |
+                                Value_Set_Name == "HIV" |
+                                Value_Set_Name == "IV Drug Abuse" |
+                                Value_Set_Name == "Sexual Activity")
 
-dim(diagnosis_icd)
-dim(patients)
+codes_from_value_sets <- as.data.frame(reduced_value_sets$Code) #creating a dataset of codes only
+codes_from_value_sets <- unique(codes_from_value_sets) #remove duplicates
+codes_from_value_sets <- droplevels(codes_from_value_sets) #drop extra factor levels
+colnames(codes_from_value_sets) <- ("Code")#rename column
+str(codes_from_value_sets)
+```
+
+```{r}
+###  Join patient id table to diagnosis_icd table
 pts_diagnosis <- left_join(patients, diagnosis_icd) #add demographics
 dim(pts_diagnosis)
-
 str(pts_diagnosis)
 
-#remove observations after First_Date_with_Hep_C_ICD_code
+#identify which observations occurred after First_Date_with_Hep_C_ICD_code
 pts_diagnosis$BeforeorAfter <-ifelse(is.na(pts_diagnosis$First_Date_with_Hep_C_ICD_code), 1,
                                         ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code < pts_diagnosis$Enc_DT_DS, 0, 1))
 
 #remove observations that occurred after Hep C diagnosis
 pts_diagnosis <- pts_diagnosis[(pts_diagnosis$BeforeorAfter == 1),]
 
-patient_icd_codes <- pts_diagnosis[c(1,7)]
-str(patient_icd_codes)
+#reduce file down to 2 columns - patient_id and icd_dx
+pt_icd_codes <- pts_diagnosis %>%
+                  select(PATIENT_ID, Code = icd_dx )
+str(pt_icd_codes)
 
 
-dummy(sexual_codes,drop=T)
-?dummy.data.frame
-
-model.matrix(PATIENT_ID ~icd_dx - 1, data = sexual_codes)
-model.matrix(~ icd_dx - 1, sexual_codes) 
-head(dummies)
-
-for (levels in unique(sexual_codes$icd_dx)) {
-  sexual_codes[paste("Code", levels, sep = "")] <- ifelse(sexual_codes$icd_dx == levels, 1, 0)
-}
-
-?model.matrix
-# example data
-df1 <- data.frame(id = icd_code_freq$PATIENT_ID, icd_code = icd_code_freq$icd_dx)
-head(df1)
-df1 <- cbind(df1$id, dummy(df1$icd_code, sep = "_"))
-dim(df1)
-names(df1)
-
+##Join value set and pts_diagnosis code to identify value set name of each icd code
+pt_icd_codes_value_sets <- inner_join(pt_icd_codes, codes_from_value_sets)
+dim(pt_icd_codes)
+dim(codes_from_value_sets)
+dim(pt_icd_codes_value_sets)
 
 
 #Create table with frequency of icd codes
+icd_freq_table <- as.data.frame.matrix(table(pt_icd_codes_value_sets$PATIENT_ID, pt_icd_codes_value_sets$icd_dx))
+str(icd_freq_table)
+
+#Create a column for PATIENT_ID
+icd_freq_table$PATIENT_ID <- rownames(icd_freq_table) 
+
+#Remove row names from data.frame
+rownames(icd_freq_table) <- NULL
+
+#move PATIENT_ID column to columns 1
+icd_freq_table <- icd_freq_table[c(177, 1:176)]
+
+#rename column names to icd_code_freq for columns 2:98
+colnames(icd_freq_table)[2:177] <- paste("FREQ", colnames(icd_freq_table[,c(2:177)]), sep = "_")
+
+####  Binning icd codes to reduce number of variables ###
+
+#create a vector of names for the reduced number categories ##
+icd_names <- names(icd_freq_table[,2:177])
+icd_names <- gsub("\\..*", "", icd_names)
+icd_names <- unique(icd_names)
+
+##function to add similar rows together
+binned_icd_freq_table <- as.data.frame(sapply(icd_names, function(x) rowSums(icd_freq_table[,grep(x, names(icd_freq_table)), drop=FALSE])))
+str(binned_icd_freq_table)
+
+binned_icd_freq_table <- cbind(PATIENT_ID = icd_freq_table$PATIENT_ID, binned_icd_freq_table)
+
+### Validating function that it worked###
+test <- as.data.frame(icd_freq_table$FREQ_131.01 + icd_freq_table$FREQ_131.09 + icd_freq_table$FREQ_131.8 + icd_freq_table$FREQ_131.9)
+colnames(test) <- c("FREQ_131")
+
+test$compare <- ifelse(test$FREQ_131 == binned_icd_freq_table$FREQ_131, "SAME", "DIFFERENT")
+sum(nrow(subset(test, compare == "DIFFERENT")))
+
+dim(icd_freq_table)
+dim(binned_icd_freq_table)
+icd_freq_table[4000,]
+binned_icd_freq_table[4000,]
+
+rowSums(icd_freq_table[578,2:177])
+rowSums(binned_icd_freq_table[578, 2:41])
+
+#join back with all patients that were lost; 
+all_pts_binned_icd_freq_table <- left_join(patients, binned_icd_freq_table)
+
+# chanage NA's to zeros
+all_pts_binned_icd_freq_table[,5:44][is.na(all_pts_binned_icd_freq_table[,5:44])] <- 0
 
 
 
-#####  Code for single icd factor level ###
-icd_078.11_freq <- as.data.frame(filter(sexual_codes, icd_dx == "078.11") %>%
-  count(PATIENT_ID))
-colnames(icd_078.11_freq) <- c("PATIENT_ID", "icd_078.11_freq")
-g
-patients <- left_join(patients, icd_078.11_freq)
-patients$icd_078.11_freq[is.na(patients$icd_078.11_freq)] <- 0
-  
-icd_codes <- unique(sexual_codes$icd_dx)
-icd_codes <- levels(droplevels(icd_codes))
-str(icd_codes)
-  
-for(x in levels(icd_codes)) { 
-a <- as.data.frame(filter(sexual_codes, icd_dx == "x") %>%
-  count(PATIENT_ID))  #filters by specific icd_dx level and counts the number of times a specific patient has that icd code
-colnames(a) <- c("PATIENT_ID", paste("icd_", x, "_freq")) #renames the data.frame columans
 
-patients <- left_join(patients, a) #joins with full id dataset
-}
-  
-icd_freq_variable <- names(patients[5:12000])
+#Create table with frequency of icd codes### 
+icd_freq_variable <- names(sexual_activity_codes[2:12000])
+
 for(x in levels(icd_freq_variable))
 patients$x <- if(patients$x == 0, 0, 1))#need to find a way to name it
+
 ```
+
+```{r}
+#subset between HEP C vs Non HEP C and commpare totals
+
+hep_c <- sapply(icd_names, function(x) nrow(subset(all_pts_binned_icd_freq_table, x > 0 & HCV_STATUS == 1)))
+
+nrow(subset(all_pts_binned_icd_freq_table, FREQ_131 > 0 & HCV_STATUS == 1))
+
+non_hep_c <- sapply(icd_names, function(x) nrow(subset(all_pts_binned_icd_freq_table, x > 0 & HCV_STATUS == 0)))
+
+comparison <- ifelse(hep_c_icd_col_sum$Hep_C_percent > non_hep_c_icd_col_sum$Non_Hep_C_percent, 1, 0)
+
+sum(comparison)
+
+
+
+```
+
+```{r}
+###  CPT Tables #######
+
+#reduce tables to only patient_ID and CPT column and join the 3 tables together
+
+reduced_procedure_icd <- procedure_icd[c("PATIENT_ID", "enc_dt_ds", "icd_px", "icd_procedure")]
+colnames(reduced_procedure_icd) <- c("PATIENT_ID", "Date", "Code", "Desc")
+
+reduced_cpt <- cpt[c("PATIENT_ID", "enc_dt_ds", "CPT", "CPT_Procedure")]
+colnames(reduced_cpt) <- c("PATIENT_ID", "Date", "Code", "Desc")            
+
+reduced_cpt_ucpg <- cpt_ucpg[c("Patient_Id", "Date_of_Service_DS", "CPT_Code")]
+colnames(reduced_cpt_ucpg) <- c("PATIENT_ID", "Date", "Code")
+reduced_cpt_ucpg$Desc <- NA
+
+
+all_cpt <- rbind(reduced_procedure_icd, reduced_cpt, reduced_cpt_ucpg)
+
+str(all_cpt)
+dim(all_cpt)
+
+
+###  Join patient id table to all cpt table
+pts_cpt <- left_join(patients, all_cpt) 
+dim(pts_cpt)
+str(pts_cpt)
+
+#identify which observations occurred after First_Date_with_Hep_C_ICD_code
+pts_cpt$BeforeorAfter <-ifelse(is.na(pts_cpt$First_Date_with_Hep_C_ICD_code), 1,
+                                        ifelse(pts_cpt$First_Date_with_Hep_C_ICD_code < pts_cpt$Date, 0, 1))
+
+#remove observations that occurred after Hep C diagnosis
+pts_cpt <- pts_cpt[(pts_cpt$BeforeorAfter == 1),]
+
+nrow(subset(pts_cpt, BeforeorAfter == 1))
+
+#reduce file down to 2 columns - patient_id and icd_dx
+pt_cpt_codes <- pts_cpt[c(1,6)]
+str(pt_cpt_codes)
+
+
+##Join value set and pts_cpt code to identify value set name of each icd code
+pt_cpt_codes_value_sets <- inner_join(pt_cpt_codes, codes_from_value_sets)
+dim(pt_cpt_codes)
+dim(codes_from_value_sets)
+dim(pt_cpt_codes_value_sets)
+
+
+#Create table with frequency of icd codes
+cpt_freq_table <- as.data.frame.matrix(table(pt_cpt_codes_value_sets$PATIENT_ID, pt_cpt_codes_value_sets$Code))
+str(cpt_freq_table)
+
+#Create a column for PATIENT_ID
+cpt_freq_table$PATIENT_ID <- rownames(cpt_freq_table) 
+
+#Remove row names from data.frame
+rownames(cpt_freq_table) <- NULL
+
+#move PATIENT_ID column to columns 1
+cpt_freq_table <- cpt_freq_table[c(107, 1:106)]
+```
+
