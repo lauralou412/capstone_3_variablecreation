@@ -51,7 +51,7 @@ dim(hep_c_icd_dx)#26540
 #table(hep_c_icd_dx$icd_diagnosis)
 
 
-length(unique(hep_c_icd_dx$PATIENT_ID)) #3768 unique patient id's #3707
+length(unique(hep_c_icd_dx$PATIENT_ID)) #unique patient id's #3707
 
 #####Find first hep c diagnosis dates#######
 
@@ -559,14 +559,14 @@ occupations<-data.frame(table(pts_social$OCCUPATION))
 ######ICD Diagnosis Codes Table#########
 
 ###import value sets
-HEDIS_value_sets <- read.csv("Z:/Value Sets/Value_Sets.csv",header = TRUE, stringsAsFactor = FALSE)
+HEDIS_value_sets <- read_delim("Z:/Value Sets/Value_Sets.csv", ",", escape_double = FALSE, trim_ws = TRUE)
 
 HEDIS_value_sets <- HEDIS_value_sets[1:135657,] #dropping empty rows at end
 tail(HEDIS_value_sets)
 str(HEDIS_value_sets)
 
 #reduce value sets to releveant sets and remove duplicate icd codes
-hep_c_project_HEDIS_value_sets <- subset(HEDIS_value_sets, Value_Set_Name == "AOD Dependence" |
+hep_c_project_HEDIS_value_sets <- subset(value_sets, Value_Set_Name == "AOD Dependence" |
                                 Value_Set_Name == "AOD Procedures" |
                                 Value_Set_Name == "AOD Rehab and Detox" |
                                 Value_Set_Name == "Chemical Dependency" |
@@ -579,21 +579,22 @@ hep_c_project_HEDIS_value_sets <- subset(HEDIS_value_sets, Value_Set_Name == "AO
                                 Value_Set_Name == "Sexual Activity")
 str(hep_c_project_HEDIS_value_sets) #2015 obserations
 
-hep_c_project_HEDIS_value_sets$Code <- gsub("\\..*", "", hep_c_project_HEDIS_value_sets$Code) #drop the decimal point and any numbers after
-hep_c_project_HEDIS_value_sets$Code <- str_pad(hep_c_project_HEDIS_value_sets$Code, 4, pad = "0") #pad so all codes are 4 characters long
-hep_c_project_HEDIS_value_sets <- hep_c_project_HEDIS_value_sets[!duplicated(hep_c_project_HEDIS_value_sets$Code),] #remove duplicates icd; some icd codes appear in more than one category #1454 unique icd codes/rows
-hep_c_project_HEDIS_value_sets <- subset(hep_c_project_HEDIS_value_sets, Code_System == "ICD9CM" | Code_System == "ICD10CM") #only ICD diagnosis codes only
 
-str(hep_c_project_HEDIS_value_sets)
+hep_c_project_HEDIS_icd_codes <- subset(hep_c_project_HEDIS_value_sets, Code_System == "ICD9CM" | Code_System == "ICD10CM") #only ICD diagnosis codes only
 
-hep_c_project_HEDIS_codes <- as.data.frame(unique(hep_c_project_HEDIS_value_sets$Code))
-colnames(hep_c_project_HEDIS_codes) <- "Code"
+hep_c_project_HEDIS_icd_codes$Code <- gsub("\\..*", "", hep_c_project_HEDIS_icd_codes$Code) #drop the decimal point and any numbers after
+hep_c_project_HEDIS_icd_codes$Code <- str_pad(hep_c_project_HEDIS_icd_codes$Code, 4, pad = "0") #pad so all codes are 4 characters long
+hep_c_project_HEDIS_icd_codes <- hep_c_project_HEDIS_icd_codes[!duplicated(hep_c_project_HEDIS_icd_codes$Code),] #remove duplicates icd;
+
+str(hep_c_project_HEDIS_icd_codes)
+
+
 
 ```
 
 ```{r}
 ###  Join patient id table to diagnosis_icd table to bring in first Hep C date
-pts_diagnosis <- left_join(patients, diagnosis_icd) #8,479,127 rows
+pts_diagnosis <- left_join(patients, modified_diagnosis_icd) #8,479,127 rows
 dim(pts_diagnosis)
 str(pts_diagnosis)
 
@@ -601,8 +602,8 @@ str(pts_diagnosis)
 pts_diagnosis$BeforeorAfter <- ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code < pts_diagnosis$enc_dt_ds, 0, 
                                       ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code == pts_diagnosis$enc_dt_ds, 0, 1))
 
-nrow(pts_diagnosis[(pts_diagnosis$ICD_TYPE == 9),])#7,961,673 rows
-nrow(pts_diagnosis[(pts_diagnosis$ICD_TYPE == 10),])#518,101 rows
+#nrow(pts_diagnosis[(pts_diagnosis$ICD_TYPE == 9),])#7,961,673 rows
+#nrow(pts_diagnosis[(pts_diagnosis$ICD_TYPE == 10),])#518,101 rows
 
 #remove observations that occurred after Hep C diagnosis
 pt_icd_codes <- pts_diagnosis[(pts_diagnosis$BeforeorAfter == 1),]
@@ -617,21 +618,19 @@ str(pt_icd_codes)
 
 ```{r}
 ##Join value set and pts_diagnosis code to identify value set name of each icd code
-pt_icd_codes_value_sets <- inner_join(hep_c_project_HEDIS_codes, pt_icd_codes, by = c("Code" = "icd_dx"))
-dim(pt_icd_codes)
-dim(HEDIS_ICD_codes)
-dim(pt_icd_codes_value_sets)
+pt_icd_codes_value_sets <- inner_join(hep_c_project_HEDIS_icd_codes, pt_icd_codes, by = c("Code" = "icd_dx"))
+dim(pt_icd_codes)#8,255,476
+dim(hep_c_project_HEDIS_icd_codes)#108
+dim(pt_icd_codes_value_sets)#642955
 
 
 ##Evaluating join
-pt_icd_codes_value_sets[is.na(pt_icd_codes_value_sets$PATIENT_ID) & pt_icd_codes_value_sets$Code_System == "ICD9CM",]
-diagnosis_icd[grep("HIV", diagnosis_icd$icd_diagnosis),]
+#pt_icd_codes_value_sets[is.na(pt_icd_codes_value_sets$PATIENT_ID) & pt_icd_codes_value_sets$Code_System == "ICD9CM",]
+#diagnosis_icd[grep("HIV", diagnosis_icd$icd_diagnosis),]
 
-unique_codes_after_join <- as.data.frame(unique(pt_icd_codes_value_sets$Code))
-
-left_join(HEDIS_ICD_codes, unique_codes_after_join)
-
-write.csv(unique_codes_after_join, "Z:/Value Sets/unique_codes_after_join.csv")
+#unique_codes_after_join <- as.data.frame(unique(pt_icd_codes_value_sets$Code))
+#left_join(HEDIS_ICD_codes, unique_codes_after_join)
+#write.csv(unique_codes_after_join, "Z:/Value Sets/unique_codes_after_join.csv")
 
 #Create table with frequency of icd codes
 icd_freq_table <- as.data.frame.matrix(table(pt_icd_codes_value_sets$PATIENT_ID, pt_icd_codes_value_sets$Code))
@@ -647,87 +646,7 @@ rownames(icd_freq_table) <- NULL#Remove row names from data.frame
 all_pts_icd_freq_table <- left_join(patients, icd_freq_table)
 
 # chanage NA's to zeros
-all_pts_icd_freq_table[,3:59][is.na(all_pts_icd_freq_table[,3:59])] <- 0
-
-######HH - add this to the patients table
-
-```
-
-```{r}
-#subset between HEP C vs Non HEP C and commpare totals
-
-hep_c <- sapply(icd_names, function(x) nrow(subset(all_pts_binned_icd_freq_table, x > 0 & HCV_STATUS == 1)))
-
-nrow(subset(all_pts_binned_icd_freq_table, FREQ_131 > 0 & HCV_STATUS == 1))
-
-non_hep_c <- sapply(icd_names, function(x) nrow(subset(all_pts_binned_icd_freq_table, x > 0 & HCV_STATUS == 0)))
-
-comparison <- ifelse(hep_c_icd_col_sum$Hep_C_percent > non_hep_c_icd_col_sum$Non_Hep_C_percent, 1, 0)
-
-sum(comparison)
-```
-
-```{r}
-###Create table with 0/1's of icd codes binned by HEDIS value categories; Ever diagnosised? ### 
-#icd_freq_variable <- names(sexual_activity_codes[2:12000])
-
-#for(x in levels(icd_freq_variable))
-#patients$x <- if(patients$x == 0, 0, 1))#need to find a way to name it
-
-```
-
-
-
-
-```{r}
-
-###  ICD codes binned by CCS categories
-###import CCS categories
-#ccs <- read.csv("Z:/Value Sets/CCSCategoryNames_ICD9.csv", header = TRUE, stringsAsFactor = FALSE)
-#head(ccs)
-#str(ccs)
-
-#ccs$X.ICD.9.CM.CODE. <- sub(".$", "", ccs$X.ICD.9.CM.CODE.)#remove last character in string
-#ccs$X.ICD.9.CM.CODE. <- sub("^.", "", ccs$X.ICD.9.CM.CODE.)#remove first character in string
-#ccs$X.ICD.9.CM.CODE. <- as.factor(ccs$X.ICD.9.CM.CODE.) #change codes to factor
-```
-
-```{r}
-
-###3  Create Frequency Table Binned by CCS groups
-subset(ccs, X.ICD.9.CM.CODE. == "7945")
-
-ccs[grep("5920", ccs$X.ICD.9.CM.CODE.),]
-pts_diagnosis[grep("5920", pts_diagnosis$icd_dx),]
-
-pts_diagnosis$icd_dx <- gsub("\\.", "", pts_diagnosis$icd_dx)  #remove decimal points
-
-##  join patient icd codes with ccs catgory
-###  NOT WORKING - some matches are not happening####
-pts_diagnosis_ccs <- left_join(pts_diagnosis, ccs, by = c("icd_dx" = "X.ICD.9.CM.CODE."))
-str(pts_diagnosis_ccs)
-pts_diagnosis_ccs[is.na(pts_diagnosis_ccs$CCS.CATEGORY),]
-
-
-#Create table with frequency of icd codes
-icd_ccs_freq_table <- as.data.frame.matrix(table(pts_diagnosis_ccs$PATIENT_ID, pts_diagnosis_ccs$CCS.CATEGORY))
-str(icd_ccs_freq_table)
-
-icd_ccs_freq_table$PATIENT_ID <- rownames(icd_ccs_freq_table)#Create a column for PATIENT_ID
-icd_ccs_freq_table <- icd_ccs_freq_table[c(253, 1:252)]#move PATIENT_ID column to columns 
-colnames(icd_ccs_freq_table)[2:252] <- paste("FREQ", colnames(icd_ccs_freq_table[,c(2:252)]), sep = "_")#rename column names to icd_code_freq for columns 2:252
-rownames(icd_ccs_freq_table) <- NULL#Remove row names from data.frame
-
-
-#join back with all patients that were lost; 
-all_pts_icd_ccs_freq_table <- left_join(patients, icd_ccs_freq_table)
-all_pts_icd_ccs_freq_table[,4:255][is.na(all_pts_icd_ccs_freq_table[,4:255])] <- 0# chanage NA's to zeros
-
-
-icd_ccs_col_Sums <- colSums(all_pts_icd_ccs_freq_table[4:255],)
-
-as.data.frame(icd_ccs_col_Sums)
-sort(icd_ccs_col_Sums)
+all_pts_icd_freq_table[,4:59][is.na(all_pts_icd_freq_table[,4:59])] <- 0
 ```
 
 ```{r}
