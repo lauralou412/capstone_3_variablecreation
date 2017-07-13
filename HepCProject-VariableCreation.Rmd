@@ -51,7 +51,7 @@ dim(hep_c_icd_dx)#26540
 #table(hep_c_icd_dx$icd_diagnosis)
 
 
-length(unique(hep_c_icd_dx$PATIENT_ID)) #unique patient id's #3707
+length(unique(hep_c_icd_dx$PATIENT_ID)) #3768 unique patient id's #3707
 
 #####Find first hep c diagnosis dates#######
 
@@ -594,7 +594,7 @@ str(hep_c_project_HEDIS_icd_codes)
 
 ```{r}
 ###  Join patient id table to diagnosis_icd table to bring in first Hep C date
-pts_diagnosis <- left_join(patients, modified_diagnosis_icd) #8,479,127 rows
+pts_diagnosis <- left_join(patients, diagnosis_icd) #8,479,127 rows
 dim(pts_diagnosis)
 str(pts_diagnosis)
 
@@ -619,9 +619,9 @@ str(pt_icd_codes)
 ```{r}
 ##Join value set and pts_diagnosis code to identify value set name of each icd code
 pt_icd_codes_value_sets <- inner_join(hep_c_project_HEDIS_icd_codes, pt_icd_codes, by = c("Code" = "icd_dx"))
-dim(pt_icd_codes)#8,255,476
-dim(hep_c_project_HEDIS_icd_codes)#108
-dim(pt_icd_codes_value_sets)#642955
+dim(pt_icd_codes)
+dim(hep_c_project_HEDIS_icd_codes)
+dim(pt_icd_codes_value_sets)
 
 
 ##Evaluating join
@@ -646,7 +646,7 @@ rownames(icd_freq_table) <- NULL#Remove row names from data.frame
 all_pts_icd_freq_table <- left_join(patients, icd_freq_table)
 
 # chanage NA's to zeros
-all_pts_icd_freq_table[,4:59][is.na(all_pts_icd_freq_table[,4:59])] <- 0
+all_pts_icd_freq_table[,3:59][is.na(all_pts_icd_freq_table[,3:59])] <- 0
 ```
 
 ```{r}
