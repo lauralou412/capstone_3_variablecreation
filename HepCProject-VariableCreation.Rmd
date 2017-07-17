@@ -566,7 +566,7 @@ tail(HEDIS_value_sets)
 str(HEDIS_value_sets)
 
 #reduce value sets to releveant sets and remove duplicate icd codes
-hep_c_project_HEDIS_value_sets <- subset(value_sets, Value_Set_Name == "AOD Dependence" |
+hep_c_project_HEDIS_value_sets <- subset(HEDIS_value_sets, Value_Set_Name == "AOD Dependence" |
                                 Value_Set_Name == "AOD Procedures" |
                                 Value_Set_Name == "AOD Rehab and Detox" |
                                 Value_Set_Name == "Chemical Dependency" |
@@ -753,14 +753,35 @@ patient_ID_encounters_ED <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID)
 patients <- left_join(patients,patient_ID_encounters_ED)
 unique(encounters$Enc_EIO)
 
-#Num_Specialty_Docs
+#Insurance_Aided
+
+levels(encounters_first_hep_c_encounter$Fin_Class) <- c("Insured", "Insured", "Aided", "Aided", 
+                                     "Insured", "Insured", "Aided", "Insured", 
+                                     "Insured", "Insured", "Insured", "Insured", 
+                                     "Insured", "Aided", "Aided", "Aided", 
+                                     "Aided", "Insured", "Insured", "Insured",
+                                     "Insured", "Insured", "Self Pay", "Self Pay")
 
 
-#Insurance_Status_History
-patient_ID_insurancecount <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, InsuranceCount = length(PATIENT_ID[!is.na(Fin_Class) & before_diagnosis == "TRUE"]))
+patient_ID_insurance_aided <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, InsuranceAidedCt = length(PATIENT_ID[Fin_Class == "Aided" & before_diagnosis == "TRUE"]))
+patient_ID_insurance_aided$Insurance_Aided <- ifelse(patient_ID_insurance_aided$InsuranceAidedCt>0,"TRUE", "FALSE")
+patients <- left_join(patients, patient_ID_insurance_aided[,3])
 
 
-write.csv(patients, "Z:/patients_20170712.csv")
+#Insurance_Gap
+patient_ID_insurancegap <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, InsuranceGap = length(PATIENT_ID[(is.na(Fin_Class) | Fin_Class == "Self Pay") & before_diagnosis == "TRUE"]))
+patient_ID_insurancecount$Insurance_Gap <- ifelse(patient_ID_insurancegap$InsuranceGap>0,"TRUE", "FALSE")
+patients <- left_join(patients, patient_ID_insurancegap[,3])
+
+#Zip_Code
+encounters_minus_zip <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),]
+
+patient_ID_zip <- encounters_minus_zip %>% 
+  group_by(PATIENT_ID) %>% 
+  summarise(c = names(table(Zip_Code_DID))[which.max(table(Zip_Code_DID))])
+
+patients <- left_join(patients, patient_ID_zip)
+patients <- left_join(patients, ACS)
 
 ```
 
