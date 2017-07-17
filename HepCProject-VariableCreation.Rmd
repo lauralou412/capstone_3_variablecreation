@@ -732,29 +732,34 @@ encounters_first_hep_c_encounter <- left_join(encounters,patients)
 encounters_first_hep_c_encounter$before_diagnosis <- ifelse(encounters_first_hep_c_encounter$Enc_DT_DS < encounters_first_hep_c_encounter$First_Date_with_Hep_C_ICD_code, "TRUE", "FALSE")
 
 #Total_Num_Encounters
-patient_ID_encounters <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_Encounters = length(PATIENT_ID[before_diagnosis == "TRUE"]))
+patient_ID_encounters<-data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE"]))
+colnames(patient_ID_encounters) <-  c("PATIENT_ID", "Total_Num_Encounters")
 patients <- left_join(patients,patient_ID_encounters)
 
 #Total_Num_Outpt_Visits
-patient_ID_encounters_outpt <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_Outpt_Visits = length(PATIENT_ID[Enc_EIO %in% c("O", "I, O", "E, O", "E, I, O") & before_diagnosis == "TRUE"]))
+patient_ID_encounters_outpt <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Enc_EIO %in% c("O", "I, O", "E, O", "E, I, O")]))
+colnames(patient_ID_encounters_outpt) <-  c("PATIENT_ID", "Total_Num_Outpt_Visits")
 patients <- left_join(patients,patient_ID_encounters_outpt)
 
+
 #Total_Num_Inpt_Admissions
-patient_ID_encounters_inpt <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_Inpt_Admissions = length(PATIENT_ID[Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I") & before_diagnosis == "TRUE"]))
+patient_ID_encounters_inpt <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I")]))
+colnames(patient_ID_encounters_inpt) <-  c("PATIENT_ID", "Total_Num_Inpt_Admissions")
 patients <- left_join(patients,patient_ID_encounters_inpt)
 
 #Average_LOS
-patient_ID_inpt_days <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Days = sum(LOS_Days[Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I") & before_diagnosis == "TRUE"]))
-patients <- left_join(patients,patient_ID_inpt_days)
-patients$Average_LOS <- patients$patient_ID_inpt_days/patients$Total_Num_Inpt_Admissions
+#aggregate(s_encounters_first_hep_c_encounter$LOS_Days, by = list(PATIENT_ID=s_encounters_first_hep_c_encounter$PATIENT_ID), FUN=sum)
+
+#patient_ID_inpt_days <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Days = sum(LOS_Days[Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I") & before_diagnosis == "TRUE"]))
+#patients <- left_join(patients,patient_ID_inpt_days)
+#patients$Average_LOS <- patients$patient_ID_inpt_days/patients$Total_Num_Inpt_Admissions
 
 #Total_Num_ED_Visits
-patient_ID_encounters_ED <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, Total_Num_ED_Visits = length(PATIENT_ID[Enc_EIO %in% c("E, I", "E", "E, I, O", "E, O") & before_diagnosis == "TRUE"]))
+patient_ID_encounters_ED <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Enc_EIO %in% c("E, I", "E", "E, I, O", "E, O")]))
+colnames(patient_ID_encounters_ED) <-  c("PATIENT_ID", "Total_Num_ED_Visits")
 patients <- left_join(patients,patient_ID_encounters_ED)
-unique(encounters$Enc_EIO)
 
 #Insurance_Aided
-
 levels(encounters_first_hep_c_encounter$Fin_Class) <- c("Insured", "Insured", "Aided", "Aided", 
                                      "Insured", "Insured", "Aided", "Insured", 
                                      "Insured", "Insured", "Insured", "Insured", 
@@ -763,25 +768,28 @@ levels(encounters_first_hep_c_encounter$Fin_Class) <- c("Insured", "Insured", "A
                                      "Insured", "Insured", "Self Pay", "Self Pay")
 
 
-patient_ID_insurance_aided <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, InsuranceAidedCt = length(PATIENT_ID[Fin_Class == "Aided" & before_diagnosis == "TRUE"]))
-patient_ID_insurance_aided$Insurance_Aided <- ifelse(patient_ID_insurance_aided$InsuranceAidedCt>0,"TRUE", "FALSE")
-patients <- left_join(patients, patient_ID_insurance_aided[,3])
+patient_ID_insurance_aided <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Fin_Class == "Aided"]))
+colnames(patient_ID_insurance_aided) <-  c("PATIENT_ID", "InsuranceAidedCt")
 
+patient_ID_insurance_aided$Insurance_Aided <- ifelse(patient_ID_insurance_aided$InsuranceAidedCt>0,"TRUE", "FALSE")
+patients <- left_join(patients, patient_ID_insurance_aided)
 
 #Insurance_Gap
-patient_ID_insurancegap <- ddply(encounters_first_hep_c_encounter,.(PATIENT_ID), summarize, InsuranceGap = length(PATIENT_ID[(is.na(Fin_Class) | Fin_Class == "Self Pay") & before_diagnosis == "TRUE"]))
-patient_ID_insurancecount$Insurance_Gap <- ifelse(patient_ID_insurancegap$InsuranceGap>0,"TRUE", "FALSE")
-patients <- left_join(patients, patient_ID_insurancegap[,3])
+patient_ID_insurancegap <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & (is.na(encounters_first_hep_c_encounter$Fin_Class)| encounters_first_hep_c_encounter$Fin_Class == "Self Pay")]))
+colnames(patient_ID_insurancegap) <-  c("PATIENT_ID", "InsuranceGap")
+
+patient_ID_insurancegap$Insurance_Gap <- ifelse(patient_ID_insurancegap$InsuranceGap>0,"TRUE", "FALSE")
+patients <- left_join(patients, patient_ID_insurancegap)
 
 #Zip_Code
-encounters_minus_zip <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),]
+encounters_minus_NAzips <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),]
 
-patient_ID_zip <- encounters_minus_zip %>% 
-  group_by(PATIENT_ID) %>% 
-  summarise(c = names(table(Zip_Code_DID))[which.max(table(Zip_Code_DID))])
+#patient_ID_zip <- encounters_minus_zip %>% 
+  #group_by(PATIENT_ID) %>% 
+  #summarise(c = names(table(Zip_Code_DID))[which.max(table(Zip_Code_DID))])
 
-patients <- left_join(patients, patient_ID_zip)
-patients <- left_join(patients, ACS)
+#patients <- left_join(patients, patient_ID_zip)
+#patients <- left_join(patients, ACS)
 
 ```
 
