@@ -111,7 +111,7 @@ hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$EncountervsICD <- i
 patients_include <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "TRUE")
 
 #create table with all unique patient ID's from all tables except meds_inpt and meds_outpt
-unique_pt_id_all_tbls<-as.data.frame(unique(c(cpt$PATIENT_ID,demo$PATIENT_ID,diagnosis_icd$PATIENT_ID,education$PATIENT_ID,encounters$PATIENT_ID,labs$PATIENT_ID,med_rec_adm$PATIENT_ID,med_rec_dc$PATIENT_ID,procedure_icd$PATIENT_ID,social_hx$PATIENT_ID)))
+unique_pt_id_all_tbls<-as.data.frame(unique(c(cpt$PATIENT_ID,demo$PATIENT_ID,diagnosis_icd$PATIENT_ID,education$PATIENT_ID,encounters$PATIENT_ID,procedure_icd$PATIENT_ID,social_hx$PATIENT_ID)))
 names(unique_pt_id_all_tbls)[1]<-paste("PATIENT_ID")
 
 #exclude patients who have hep c but didn't get it during our time horizon
@@ -579,7 +579,6 @@ hep_c_project_HEDIS_value_sets <- subset(HEDIS_value_sets, Value_Set_Name == "AO
                                 Value_Set_Name == "Sexual Activity")
 str(hep_c_project_HEDIS_value_sets) #2015 obserations
 
-
 hep_c_project_HEDIS_icd_codes <- subset(hep_c_project_HEDIS_value_sets, Code_System == "ICD9CM" | Code_System == "ICD10CM") #only ICD diagnosis codes only
 
 hep_c_project_HEDIS_icd_codes$Code <- gsub("\\..*", "", hep_c_project_HEDIS_icd_codes$Code) #drop the decimal point and any numbers after
@@ -589,12 +588,13 @@ hep_c_project_HEDIS_icd_codes <- hep_c_project_HEDIS_icd_codes[!duplicated(hep_c
 str(hep_c_project_HEDIS_icd_codes)
 
 
+hep_c_project_HEDIS_procedure_codes <- subset(hep_c_project_HEDIS_value_sets, Code_System == "CPT" | Code_System == "ICD10PCS" | Code_System == "ICD9PCS") #only Procedure codes only #356 codes
 
 ```
 
 ```{r}
 ###  Join patient id table to diagnosis_icd table to bring in first Hep C date
-pts_diagnosis <- left_join(patients, diagnosis_icd) #8,479,127 rows
+pts_diagnosis <- left_join(patients, modified_diagnosis_icd) #8,479,127 rows
 dim(pts_diagnosis)
 str(pts_diagnosis)
 
@@ -643,10 +643,11 @@ rownames(icd_freq_table) <- NULL#Remove row names from data.frame
 
 
 #join back with patients id's that were lost; 
-all_pts_icd_freq_table <- left_join(patients, icd_freq_table)
+patients <- left_join(patients, icd_freq_table)
 
 # chanage NA's to zeros
-all_pts_icd_freq_table[,3:59][is.na(all_pts_icd_freq_table[,3:59])] <- 0
+patients[,11:66][is.na(patients[,11:66])] <- 0  #changed this line!!!!!!
+
 ```
 
 ```{r}
@@ -672,7 +673,7 @@ dim(all_cpt)
 
 
 ###  Join patient id table to all cpt table
-pts_cpt <- left_join(patients, all_cpt) 
+pts_cpt <- inner_join(patients, all_cpt) 
 dim(pts_cpt)
 str(pts_cpt)
 
@@ -685,15 +686,15 @@ pts_cpt <- pts_cpt[(pts_cpt$BeforeorAfter == 1),]
 
 nrow(subset(pts_cpt, BeforeorAfter == 1))
 
-#reduce file down to 2 columns - patient_id and icd_dx
-pt_cpt_codes <- pts_cpt[c(1,6)]
+#reduce file down to 2 columns - patient_id and procedure code
+pt_cpt_codes <- pts_cpt[c("PATIENT_ID", "Code")]
 str(pt_cpt_codes)
 
 
 ##Join value set and pts_cpt code to identify value set name of each icd code
-pt_cpt_codes_value_sets <- inner_join(pt_cpt_codes, codes_from_value_sets)
+pt_cpt_codes_value_sets <- inner_join(pt_cpt_codes, hep_c_project_HEDIS_procedure_codes)
 dim(pt_cpt_codes)
-dim(codes_from_value_sets)
+dim(hep_c_project_HEDIS_procedure_codes)
 dim(pt_cpt_codes_value_sets)
 
 
@@ -701,23 +702,18 @@ dim(pt_cpt_codes_value_sets)
 cpt_freq_table <- as.data.frame.matrix(table(pt_cpt_codes_value_sets$PATIENT_ID, pt_cpt_codes_value_sets$Code))
 str(cpt_freq_table)
 
-#Create a column for PATIENT_ID
-cpt_freq_table$PATIENT_ID <- rownames(cpt_freq_table) 
-
-#Remove row names from data.frame
-rownames(cpt_freq_table) <- NULL
-
-#move PATIENT_ID column to columns 1
-cpt_freq_table <- cpt_freq_table[c(107, 1:106)]
+cpt_freq_table$PATIENT_ID <- rownames(cpt_freq_table) #Create a column for PATIENT_ID
+cpt_freq_table <- cpt_freq_table[c(81, 1:80)]#move PATIENT_ID column to columns 1
+rownames(cpt_freq_table) <- NULL#Remove row names from data.frame
 
 #rename column names to icd_code_freq for columns 2:98
-colnames(cpt_freq_table)[2:107] <- paste("FREQ", colnames(cpt_freq_table[,c(2:107)]), sep = "_")
+colnames(cpt_freq_table)[2:81] <- paste("FREQ", colnames(cpt_freq_table[,c(2:81)]), sep = "_")
 
 #join back with all patients that were lost; 
-all_pts_cpt_freq_table <- left_join(patients, cpt_freq_table)
+patients <- left_join(patients, cpt_freq_table)
 
 # chanage NA's to zeros
-all_pts_cpt_freq_table[,5:110][is.na(all_pts_cpt_freq_table[,5:110])] <- 0
+patients[,67:146][is.na(patients[,67:146])] <- 0
 
 ######HH - add this to the patients table
 
@@ -735,17 +731,20 @@ encounters_first_hep_c_encounter$before_diagnosis <- ifelse(encounters_first_hep
 patient_ID_encounters<-data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE"]))
 colnames(patient_ID_encounters) <-  c("PATIENT_ID", "Total_Num_Encounters")
 patients <- left_join(patients,patient_ID_encounters)
+patients[,"Total_Num_Encounters"][is.na(patients[,"Total_Num_Encounters"])] <- 0
 
 #Total_Num_Outpt_Visits
 patient_ID_encounters_outpt <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Enc_EIO %in% c("O", "I, O", "E, O", "E, I, O")]))
 colnames(patient_ID_encounters_outpt) <-  c("PATIENT_ID", "Total_Num_Outpt_Visits")
 patients <- left_join(patients,patient_ID_encounters_outpt)
+patients[,"Total_Num_Outpt_Visits"][is.na(patients[,"Total_Num_Outpt_Visits"])] <- 0
 
 
 #Total_Num_Inpt_Admissions
 patient_ID_encounters_inpt <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I")]))
 colnames(patient_ID_encounters_inpt) <-  c("PATIENT_ID", "Total_Num_Inpt_Admissions")
 patients <- left_join(patients,patient_ID_encounters_inpt)
+patients[,"Total_Num_Inpt_Admissions"][is.na(patients[,"Total_Num_Inpt_Admissions"])] <- 0
 
 #Average_LOS
 #aggregate(s_encounters_first_hep_c_encounter$LOS_Days, by = list(PATIENT_ID=s_encounters_first_hep_c_encounter$PATIENT_ID), FUN=sum)
@@ -758,6 +757,7 @@ patients <- left_join(patients,patient_ID_encounters_inpt)
 patient_ID_encounters_ED <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Enc_EIO %in% c("E, I", "E", "E, I, O", "E, O")]))
 colnames(patient_ID_encounters_ED) <-  c("PATIENT_ID", "Total_Num_ED_Visits")
 patients <- left_join(patients,patient_ID_encounters_ED)
+patients[,"Total_Num_ED_Visits"][is.na(patients[,"Total_Num_ED_Visits"])] <- 0
 
 #Insurance_Aided
 levels(encounters_first_hep_c_encounter$Fin_Class) <- c("Insured", "Insured", "Aided", "Aided", 
@@ -773,6 +773,8 @@ colnames(patient_ID_insurance_aided) <-  c("PATIENT_ID", "InsuranceAidedCt")
 
 patient_ID_insurance_aided$Insurance_Aided <- ifelse(patient_ID_insurance_aided$InsuranceAidedCt>0,"TRUE", "FALSE")
 patients <- left_join(patients, patient_ID_insurance_aided)
+patients[,"Insurance_Aided"][is.na(patients[,"Insurance_Aided"])] <- "FALSE"
+patients[,"InsuranceAidedCt"][is.na(patients[,"InsuranceAidedCt"])] <- 0
 
 #Insurance_Gap
 patient_ID_insurancegap <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & (is.na(encounters_first_hep_c_encounter$Fin_Class)| encounters_first_hep_c_encounter$Fin_Class == "Self Pay")]))
@@ -780,6 +782,7 @@ colnames(patient_ID_insurancegap) <-  c("PATIENT_ID", "InsuranceGap")
 
 patient_ID_insurancegap$Insurance_Gap <- ifelse(patient_ID_insurancegap$InsuranceGap>0,"TRUE", "FALSE")
 patients <- left_join(patients, patient_ID_insurancegap)
+patients[,"Insurance_Gap"][is.na(patients[,"Insurance_Gap"])] <- "FALSE"
 
 #Zip_Code
 encounters_minus_NAzips <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),]
