@@ -153,31 +153,40 @@ patients <- patients[,c(1, 3, 5)]
 
 dim(demo)
 dim(patients)
-pts_demo <- left_join(patients, demo) #add demographics
-dim(pts_demo)
-
-str(pts_demo)
+patients <- left_join(patients, demo) #add demographics
+dim(patients)
 
 
-pts_demo <- pts_demo[,c( "PATIENT_ID", "HCV_STATUS", "DOB_DS", "Gender", "Race", "Ethnicity", "language", "Marital_Status",      "DOD_DS")] #reducing down the columns
-names(pts_demo)[c(3:9)] <- c("DOB","GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS", "DOD") #rename columns
+patients <- patients[,c( "PATIENT_ID", "First_Date_with_Hep_C_ICD_code", "HCV_STATUS", "DOB_DS", "Gender", "Race", "Ethnicity", "language", "Marital_Status")] #reducing down the columns
+names(patients)[c(4:9)] <- c("DOB","GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS") #rename columns
+
+
+
+## Remove NA's
+patients[,"RACE"][is.na(patients[,"RACE"])] <- "Unknown"
+patients[,"GENDER"][is.na(patients[,"GENDER"])] <- "U"
+patients[,"ETHNICITY"][is.na(patients[,"ETHNICITY"])] <- "Unknown"
+
+names(patients)
 
 library(eeptools)
-## DOB ##
-pts_demo$DOB[is.na(pts_demo$DOB)] <- Sys.Date()
-pts_demo$age_T0 <- age_calc(dob = pts_demo$DOB, enddate = Sys.Date(), units = "years")
+## Age ##
+patients$DOB[is.na(patients$DOB)] <- Sys.Date()
+patients$AGE <- age_calc(dob = patients$DOB, enddate = Sys.Date(), units = "years")
 
-## reduce Language levels to 2
-
-levels(pts_demo$language)
-
-levels(pts_demo$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
+## Language ##
+## reduce Language levels to 2 - NOT WORKING
+levels(patients$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
 "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English",
 "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English") #reducing language to 2 factors
 
-#reduce Marital Status levels to 4
+#levels(patients$LANGUAGE) <- c(patients$LANGUAGE, "Unknown")
+patients[,"LANGUAGE"][is.na(patients[,"LANGUAGE"])] <- "Non-English"
+table(patients$LANGUAGE)
 
-levels(pts_demo$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "Unknown", "Divorced_Separated", 
+## Marital Status ##
+#reduce Marital Status levels to 4
+levels(patients$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "Unknown", "Divorced_Separated", 
                                      "Divorced_Separated", "Unknown", "Unknown", "Unknown", 
                                      "Unknown", "Divorced_Separated", "Divorced_Separated", "Unknown", 
                                      "Unknown", "Married_Committed", "Unknown", "Unknown", 
@@ -187,6 +196,16 @@ levels(pts_demo$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "
                                      "Unknown", "Unknown", "Unknown", "Unknown",
                                     "Widowed", "Unknown", "Unknown", "Unknown", 
                                     "Unknown", "Unknown")
+
+patients[,"MARITAL_STATUS"][is.na(patients[,"MARITAL_STATUS"])] <- "Unknown"
+
+## remove DOB
+patients <- patients[,-4]
+
+## bin ages
+
+
+
 ```
 
 
@@ -254,6 +273,8 @@ str(pt_icd_codes)
 #unique_codes <- sort(unique(pt_icd_codes$icd_dx))
 #length(unique_codes)
 #write.csv(unique_codes, "Z:/Value Sets/unique_codes.csv")
+
+
 ```
 
 ```{r}
@@ -284,9 +305,11 @@ rownames(icd_freq_table) <- NULL#Remove row names from data.frame
 
 #join back with patients id's that were lost; 
 patients <- left_join(patients, icd_freq_table)
+str(patients)
 
 # chanage NA's to zeros
-patients[,11:66][is.na(patients[,11:66])] <- 0  #changed this line!!!!!!
+patients[,9:65][is.na(patients[,9:65])] <- 0  #changed this line!!!!!!
+
 
 ```
 
@@ -351,14 +374,18 @@ colnames(cpt_freq_table)[2:81] <- paste("FREQ", colnames(cpt_freq_table[,c(2:81)
 
 #join back with all patients that were lost; 
 patients <- left_join(patients, cpt_freq_table)
+str(patients)
+
 
 # chanage NA's to zeros
-patients[,67:146][is.na(patients[,67:146])] <- 0
+patients[,66:145][is.na(patients[,66:145])] <- 0
 
 ######HH - add this to the patients table
 
 #####CINDY'S CODE ENDS ########
 #---------------------------------------
+
+
 ```
 
 
@@ -410,22 +437,26 @@ levels(encounters_first_hep_c_encounter$Fin_Class) <- c("Insured", "Insured", "A
 
 patient_ID_insurance_aided <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & encounters_first_hep_c_encounter$Fin_Class == "Aided"]))
 colnames(patient_ID_insurance_aided) <-  c("PATIENT_ID", "InsuranceAidedCt")
+patient_ID_insurance_aided[,"InsuranceAidedCt"][is.na(patient_ID_insurance_aided[,"InsuranceAidedCt"])] <- 0
 
 patient_ID_insurance_aided$Insurance_Aided <- ifelse(patient_ID_insurance_aided$InsuranceAidedCt>0,"TRUE", "FALSE")
 patients <- left_join(patients, patient_ID_insurance_aided)
-patients[,"Insurance_Aided"][is.na(patients[,"Insurance_Aided"])] <- "FALSE"
 patients[,"InsuranceAidedCt"][is.na(patients[,"InsuranceAidedCt"])] <- 0
+patients[,"Insurance_Aided"][is.na(patients[,"Insurance_Aided"])] <- "FALSE"
+
 
 #Insurance_Gap
 patient_ID_insurancegap <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$before_diagnosis=="TRUE" & (is.na(encounters_first_hep_c_encounter$Fin_Class)| encounters_first_hep_c_encounter$Fin_Class == "Self Pay")]))
 colnames(patient_ID_insurancegap) <-  c("PATIENT_ID", "InsuranceGap")
 
+
 patient_ID_insurancegap$Insurance_Gap <- ifelse(patient_ID_insurancegap$InsuranceGap>0,"TRUE", "FALSE")
 patients <- left_join(patients, patient_ID_insurancegap)
+patients[,"InsuranceGap"][is.na(patients[,"InsuranceGap"])] <- 0
 patients[,"Insurance_Gap"][is.na(patients[,"Insurance_Gap"])] <- "FALSE"
 
 #Zip_Code
-encounters_minus_NAzips <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),]
+#encounters_minus_NAzips <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),]
 
 #patient_ID_zip <- encounters_minus_zip %>% 
   #group_by(PATIENT_ID) %>% 
@@ -433,6 +464,8 @@ encounters_minus_NAzips <- encounters_first_hep_c_encounter[!is.na(encounters_fi
 
 #patients <- left_join(patients, patient_ID_zip)
 #patients <- left_join(patients, ACS)
+
+sum(is.na(patients))
 
 ```
 
