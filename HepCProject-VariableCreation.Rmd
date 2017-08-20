@@ -1,8 +1,6 @@
 ---
-title: "capstone_variablecreation"
-author: "Laura Olson"
-date: "May 20, 2017"
-output: html_document
+title: "Variable Creation"
+output: word_document
 ---
 
 ```{r}
@@ -10,14 +8,6 @@ output: html_document
 library(dplyr)
 library(plyr)
 
-
-ACS$Total_Pop <- as.numeric(ACS$Total_Pop)
-ACS$Pct_Dropped_Out <- as.numeric(ACS$Pct_Dropped_Out)
-ACS$Median_HHI <- as.numeric(ACS$Median_HHI)
-ACS$Median_House_Value <- as.numeric(ACS$Median_House_Value)
-ACS$Median_Gross_Rent <- as.numeric(ACS$Median_Gross_Rent)
-ACS$Pct_Under_18_Poverty <- as.numeric(ACS$Pct_Under_18_Poverty)
-ACS$Pct_65_Plus_Poverty <- as.numeric(ACS$Pct_65_Plus_Poverty)
 ```
 
 
@@ -96,18 +86,20 @@ hep_c_patient_encounters_dates <- hep_c_patient_encounters[c("PATIENT_ID", "ENCO
 #find min encounter date for hep C patients; change column name 
 hep_c_patients_first_encounter_date <- aggregate(Enc_DT_DS~PATIENT_ID,  data = hep_c_patient_encounters_dates, min)
 names(hep_c_patients_first_encounter_date)[names(hep_c_patients_first_encounter_date) == "Enc_DT_DS"] <- "First_Encounter_Date"
-str(hep_c_patients_ids_first_hep_c_encounter_date)
 
 #merge encounter dates with first hep c diangosis date
 hep_c_patients_first_encounter_date_and_first_hep_c_icd_code <- merge(hep_c_patients_first_encounter_date, hep_c_patients_ids_first_hep_c_encounter_date, by ="PATIENT_ID")
-str(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code)
+
 
 #Evaluate whether first enounter date is greater, less or equal to first encounter date - patients diagnosed within our periods of interest are "TRUE"
-hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$EncountervsICD <- ifelse(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$First_Encounter_Date < hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$First_Date_with_Hep_C_ICD_code,  "TRUE", "FALSE")
+##BFORE = first encounter date is before first Hep C ICD code
+##SAME = first encounter date is the same as first Hep C ICD code
+hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$EncountervsICD <- ifelse(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$First_Encounter_Date < hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$First_Date_with_Hep_C_ICD_code,  "BEFORE", "SAME")
 
-#nrow(subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == 'TRUE'))
-#nrow(subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == 'FALSE'))
+nrow(subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == 'BEFORE'))  ##2485
+nrow(subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == 'SAME'))  #1220
 
+str(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code)
 ```
 
 
@@ -115,15 +107,15 @@ hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$EncountervsICD <- i
 ```{r}
 
 
-#include patients whose first encounter date was <= to first Hep C icd code - patients diagnosed during our time horizon
-patients_include <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "TRUE")
+#include patients whose first encounter date was < to first Hep C icd code - patients diagnosed during our time horizon
+patients_include <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "BEFORE")
 
 #create table with all unique patient ID's from all tables except meds_inpt and meds_outpt
-unique_pt_id_all_tbls<-as.data.frame(unique(c(cpt$PATIENT_ID,demo$PATIENT_ID,diagnosis_icd$PATIENT_ID,education$PATIENT_ID,encounters$PATIENT_ID,procedure_icd$PATIENT_ID,social_hx$PATIENT_ID)))
+unique_pt_id_all_tbls<-as.data.frame(unique(c(cpt$PATIENT_ID,demo$PATIENT_ID,diagnosis_icd$PATIENT_ID,encounters$PATIENT_ID,procedure_icd$PATIENT_ID,social_hx$PATIENT_ID)))
 names(unique_pt_id_all_tbls)[1]<-paste("PATIENT_ID")
 
 #exclude patients who have hep c but didn't get it during our time horizon
-patients_exclude <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "FALSE")
+patients_exclude <- subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == "SAME")
 
 #master list of patients in scope for the analysis
 patients <- left_join(unique_pt_id_all_tbls,patients_include)
@@ -147,8 +139,6 @@ patients$First_Date_with_Hep_C_ICD_code<-patients$first_date
 #reduce to only patient ID and HCV status, first diagnosis date
 patients <- patients[,c(1, 3, 5)]
 
-str(patients)
-
 #Filter encounter table on patietns in scope for analysis only
 pt_encounters <- encounters[encounters$PATIENT_ID %in% patients$PATIENT_ID,]
 
@@ -158,11 +148,12 @@ names(pts_first_encounter_date)[names(pts_first_encounter_date) == "Enc_DT_DS"] 
 
 #merge first encounter date with patient data 
 patients <- left_join(patients, pts_first_encounter_date)
-str(patients)
 
 ##remove patients without a first encounter date
-
 patients <- patients[(!is.na(patients$First_Encounter_Date)),]
+
+str(patients) #283661 patients
+
 
 ```
 
@@ -174,7 +165,7 @@ patients <- patients[(!is.na(patients$First_Encounter_Date)),]
 patients <- left_join(patients, demo) #add demographics table
 dim(patients)
 dim(demo)
-dim(patients)
+
 
 ## Age ##
 library(eeptools)
@@ -207,7 +198,6 @@ patients$AGE_CATEGORY <- as.factor(patients$AGE_CATEGORY) #changing data strctur
 ## reduce columans
 patients <- patients[,c( "PATIENT_ID", "First_Date_with_Hep_C_ICD_code", "HCV_STATUS", "Gender", "Race", "Ethnicity", "language", "Marital_Status", "AGE_CATEGORY")] #reducing down the columns
 names(patients)[c(4:8)] <- c("GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS") #rename columns
-
 
 ## Remove NA's
 patients[,"RACE"][is.na(patients[,"RACE"])] <- "Unknown"
@@ -251,8 +241,6 @@ sum(is.na(patients))
 ```{r}
 ####  CINDY'S CODE #######
 #-----------------------------------
-
-
 
 ######ICD Diagnosis Codes Table#########
 
@@ -330,6 +318,8 @@ reduced_cpt_ucpg$Desc <- NA
 
 ##CHOOSE WHAT TABLES TO INCLUDE ---------------------------
 modified_diagnosis_icd <- rbind(reduced_diagnosis_icd, reduced_cpt_ucpg)
+#modified_diagnosis_icd <- reduced_diagnosis_icd
+
 str(modified_diagnosis_icd)
 
 
@@ -356,11 +346,6 @@ pt_icd_codes <- pts_diagnosis[(pts_diagnosis$BeforeorAfter == "Before"),]
 
 str(pt_icd_codes)
 
-#Looking unique codes
-#unique_codes <- sort(unique(pt_icd_codes$icd_dx))
-#length(unique_codes)
-#write.csv(unique_codes, "Z:/Value Sets/unique_codes.csv")
-
 
 ```
 
@@ -373,14 +358,9 @@ dim(pt_icd_codes)
 dim(hep_c_project_HEDIS_icd_codes)
 dim(pt_icd_codes_value_sets)
 
-
 ##Evaluating join
 #pt_icd_codes_value_sets[is.na(pt_icd_codes_value_sets$PATIENT_ID) & pt_icd_codes_value_sets$Code_System == "ICD9CM",]
 #diagnosis_icd[grep("HIV", diagnosis_icd$icd_diagnosis),]
-
-#unique_codes_after_join <- as.data.frame(unique(pt_icd_codes_value_sets$Code))
-#left_join(HEDIS_ICD_codes, unique_codes_after_join)
-#write.csv(unique_codes_after_join, "Z:/Value Sets/unique_codes_after_join.csv")
 
 #Create table with frequency of icd codes
 icd_freq_table <- as.data.frame.matrix(table(pt_icd_codes_value_sets$PATIENT_ID, pt_icd_codes_value_sets$Code))
@@ -388,9 +368,8 @@ str(icd_freq_table)
 
 icd_freq_table$PATIENT_ID <- rownames(icd_freq_table)  #Create a column for PATIENT_ID
 icd_freq_table <- icd_freq_table[c(57, 1:56)] #move PATIENT_ID column to columns 1
-colnames(icd_freq_table)[2:57] <- paste("FREQ_ICDh", colnames(icd_freq_table[,c(2:57)]), sep = "_")#rename column names to icd_code_freq for columns 2:56
+colnames(icd_freq_table)[2:57] <- paste("FREQ_ICD", colnames(icd_freq_table[,c(2:57)]), sep = "_")#rename column names to icd_code_freq for columns 2:56
 rownames(icd_freq_table) <- NULL#Remove row names from data.frame
-
 
 #join back with patients id's that were lost; 
 patients <- left_join(patients, icd_freq_table)
@@ -484,12 +463,18 @@ str(patients)
 # chanage NA's to zeros
 patients[,66:124][is.na(patients[,66:124])] <- 0
 
+sum(is.na(patients))
+
 ```
 
 
 ```{r}
-#Laura's Encounter Variables
+####  Encounter Variables ####
+
 encounters_first_hep_c_encounter <- inner_join(encounters,patients)
+
+##TRUE = Encounter was before first Hep C icd code
+##FALSE = Encounter was NOT before first Hep C icd code
 encounters_first_hep_c_encounter$before_diagnosis <- ifelse(encounters_first_hep_c_encounter$Enc_DT_DS < encounters_first_hep_c_encounter$First_Date_with_Hep_C_ICD_code, "TRUE", "FALSE") #Evaluate whether encounter was before or after first Hep C icd code date
 encounters_first_hep_c_encounter <- encounters_first_hep_c_encounter[(encounters_first_hep_c_encounter$before_diagnosis=="TRUE"),] #Remove "False"
 
@@ -557,40 +542,72 @@ patients$Insurance_Aided <- as.factor(patients$Insurance_Aided)
 patient_ID_insurancegap <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[(is.na(encounters_first_hep_c_encounter$Fin_Class)| encounters_first_hep_c_encounter$Fin_Class == "Self Pay")]))
 colnames(patient_ID_insurancegap) <-  c("PATIENT_ID", "InsuranceGapCt")
 
-table(encounters$PATIENT_ID, encounters$Zip_Code_DID)
 patient_ID_insurancegap$Insurance_Gap <- ifelse(patient_ID_insurancegap$InsuranceGap>0,"TRUE", "FALSE")
 patient_ID_insurancegap <- patient_ID_insurancegap[, c(1,3)] #remove count variable
 patients <- left_join(patients, patient_ID_insurancegap)
 patients[,"Insurance_Gap"][is.na(patients[,"Insurance_Gap"])] <- "FALSE"
 patients$Insurance_Gap <- as.factor(patients$Insurance_Gap)
 
+str(patients)
+
+sum(is.na(patients))
+
+```
+
+```{r}
+#####  American Community survey Data ######
+
+####  Finding Most Frequent zip Codes ###
 #Zip_Code
-encounters_minus_NAzips <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),] #remove obserevations with NA's
-encounters_minus_NAzips <- encounters_minus_NAzips[,c("PATIENT_ID", "Zip_Code_DID")] #eliminate other variables in the encounters to speed things up
-encounters_minus_NAzips$Zip_Code_DID <- as.factor(encounters_minus_NAzips$Zip_Code_DID) #make it into a factor
+#encounters_minus_NAzips <- encounters_first_hep_c_encounter[!is.na(encounters_first_hep_c_encounter$Zip_Code_DID),] #remove obserevations with NA's
+#encounters_minus_NAzips <- encounters_minus_NAzips[,c("PATIENT_ID", "Zip_Code_DID")] #eliminate other variables in the encounters to speed things up
+#encounters_minus_NAzips$Zip_Code_DID <- as.factor(encounters_minus_NAzips$Zip_Code_DID) #make it into a factor
 
-zip_code_freq_table <- as.data.frame.matrix(table(encounters_minus_NAzips$PATIENT_ID, encounters_minus_NAzips$Zip_Code_DID)) #create table with patient_ID's as rowns and zip codes as column
-str(zip_code_freq_table) 
+#zip_code_freq_table <- as.data.frame.matrix(table(encounters_minus_NAzips$PATIENT_ID, encounters_minus_NAzips$Zip_Code_DID)) #create table with patient_ID's as rowns and zip codes as column
+#str(zip_code_freq_table) 
 
-zip_code_freq_table$Most_Freq_Zip <- colnames(zip_code_freq_table)[apply(zip_code_freq_table, 1,which.max)]#creating a new column that gives which column has the highest value; ties goes to the lowest index 
+#zip_code_freq_table$Most_Freq_Zip <- colnames(zip_code_freq_table)[apply(zip_code_freq_table, 1,which.max)]#creating a new column that gives which column has the highest value; ties goes to the lowest index 
 
-pts_zip_ACS <- zip_code_freq_table[,c(1,6778)] #reduce columns
-pts_zip_ACS$PATIENT_ID <- rownames(pts_zip_ACS) #Create a column for PATIENT_ID
-pts_zip_ACS <- pts_zip_ACS[c(3, 2)]#move PATIENT_ID column to columns 1
-rownames(pts_zip_ACS) <- NULL#Remove row names from data.frame
+#pts_zip_ACS <- zip_code_freq_table[,c(1,6778)] #reduce columns
+#pts_zip_ACS$PATIENT_ID <- rownames(pts_zip_ACS) #Create a column for PATIENT_ID
+#pts_zip_ACS <- pts_zip_ACS[c(3, 2)]#move PATIENT_ID column to columns 1
+#rownames(pts_zip_ACS) <- NULL#Remove row names from data.frame
 
-pts_zip_ACS <- left_join(pts_zip_ACS, ACS, c("Most_Freq_Zip" = "Zip_Code_DID")) #add ACS by matching on zip code; 954 zip codes unmatched???
-patients <- left_join(patients, pts_zip_ACS) #join with other patient variables
 
+##Import Zip Code assignment file
+zip_updates<-read_delim("Z:/ZipReassignmentForR_081317.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+str(zip_updates)
+zip_updates$PATIENT_ID<-as.character(zip_updates$PATIENT_ID) 
+zip_updates$PATIENT_ID<-str_pad(zip_updates$PATIENT_ID, 10, pad = "0")
+zip_updates$Most_Freq_Zip<-as.character(zip_updates$NewZip) 
+
+
+pts_zip_ACS <- left_join(zip_updates, ACS, c("Most_Freq_Zip" = "Zip_Code_DID")) #add ACS by matching on zip code; 954 zip codes unmatched???
+dim(zip_updates)
 dim(pts_zip_ACS)
-sum(is.na(patients$Most_Freq_Zip))  #25304 NA's - no zip code
-sum(is.na(patients$Pct_No_Health_Insurance)) #26258 NA's - no ACS data
-###What to with NA's???
+sum(is.na(pts_zip_ACS))
+sum(is.na(pts_zip_ACS$Most_Freq_Zip))
+sum(is.na(pts_zip_ACS$Pct_No_Health_Insurance))
+str(pts_zip_ACS)
 
-nrow(subset(patients, is.na(Most_Freq_Zip) & HCV_STATUS == 0))  #25079
-nrow(subset(patients, is.na(Most_Freq_Zip) & HCV_STATUS == 1))  #225
 
-str(patients[,151:180])
+patients <- left_join(patients, pts_zip_ACS) #join with other patient variables
+dim(pts_zip_ACS)
+dim(patients)
+sum(is.na(patients$Most_Freq_Zip))  #0 NA's - no zip code
+sum(is.na(patients$Pct_No_Health_Insurance)) #5 NA's - no ACS data
+
+str(patients[,1:75])
+str(patients[,76:150])
+str(patients[,151:175])
+
+names(patients)
+#remove zip code column
+patients <- patients[-c(132:133)]
+
+#remove NA's
+patients[,132:173][is.na(patients[,132:173])] <- 0 
+sum(is.na(patients))
 ```
 
 
@@ -955,15 +972,258 @@ occupations<-data.frame(table(pts_social$OCCUPATION))
 
 
 ```
-```{r}
-#####  Double Check flat File
 
-sum(is.na(patients[,172]))  # should be zero NA's
+```{r}
+#####  Double Check flat File & Export
+
+sum(is.na(patients))  # should be zero NA's
 #26258
-dim(patients)  #232661   180
+dim(patients)  #232661   179
 str(patients)
 names(patients)
 
-patients[,131:172][is.na(patients[,131:172])] <- 0 
+
+write.csv(patients, "Z:/Flat File/patients_HEDIS_20170816file.csv")
 ```
 
+```{r}
+
+### CCS categories ####
+
+###  Import CCS  9 categories  ####
+
+ccs_9 <- read.csv("Z:/Value Sets/CCSCategoryNames_ICD9.csv", header = TRUE, stringsAsFactor = FALSE)
+
+#Formatting CCS file
+ccs_9$X.ICD.9.CM.CODE. <- sub(".$", "", ccs_9$X.ICD.9.CM.CODE.)#remove last character in string
+ccs_9$X.ICD.9.CM.CODE. <- sub("^.", "", ccs_9$X.ICD.9.CM.CODE.)#remove first character in string
+
+ccs_9$X.ICD.9.CM.CODE. <- trimws(ccs_9$X.ICD.9.CM.CODE., which = c("right")) #remove extra spaces
+ccs_9$X.ICD.9.CM.CODE. <- str_pad(ccs_9$X.ICD.9.CM.CODE., 5, "right", pad = "0") #add zeros at the end
+
+ccs_9 <- ccs_9 [c("X.ICD.9.CM.CODE.",  "CCS.CATEGORY", "X.CCS.CATEGORY.DESCRIPTION.")]
+colnames(ccs_9) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
+ccs_9 <- ccs_9[!duplicated(ccs_9$Code),]
+str(ccs_9)
+
+###  Import CCS  10 categories  ####
+
+ccs_10 <- read.csv("Z:/Value Sets/ccs_dx_icd10cm_2017.csv", header = TRUE, stringsAsFactor = FALSE)
+
+#Formatting CCS file
+ccs_10$X.ICD.10.CM.CODE. <- sub(".$", "", ccs_10$X.ICD.10.CM.CODE.)#remove last character in string
+ccs_10$X.ICD.10.CM.CODE. <- sub("^.", "", ccs_10$X.ICD.10.CM.CODE.)#remove first character in string
+
+ccs_10$X.CCS.CATEGORY. <- sub(".$", "", ccs_10$X.CCS.CATEGORY.)#remove last character in string
+ccs_10$X.CCS.CATEGORY. <- sub("^.", "", ccs_10$X.CCS.CATEGORY.)#remove first character in string
+
+ccs_10 <- ccs_10 [c("X.ICD.10.CM.CODE.",  "X.CCS.CATEGORY.", "X.CCS.CATEGORY.DESCRIPTION.")]
+colnames(ccs_10) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
+str(ccs_10)
+```
+
+
+
+```{r}
+#### icd Diagnosis table - ICD Codes ####
+#### Map ICD codes to CCS categories  ###########
+
+reduced_diagnosis_icd <- diagnosis_icd[c("PATIENT_ID", "enc_dt_ds", "icd_dx", "ICD_TYPE", "icd_diagnosis")]
+colnames(reduced_diagnosis_icd) <- c("PATIENT_ID", "Date", "Code", "Type", "Desc")
+
+### ICD 9 ###
+reduced_diagnosis_icd_9 <- subset(reduced_diagnosis_icd, Type == "9") #8,016,285
+reduced_diagnosis_icd_9 <- reduced_diagnosis_icd_9[,-4]
+
+reduced_diagnosis_icd_9$Code <- gsub("\\.", "", reduced_diagnosis_icd_9$Code) #remove decimal point
+reduced_diagnosis_icd_9$Code <- str_pad(reduced_diagnosis_icd_9$Code, 5, "right", pad = "0") #pad so all codes are 4 characters long
+
+#join icd 9 codes from diagnosis table to ccs categories
+icd_9_codes_ccs <- inner_join(reduced_diagnosis_icd_9, ccs_9)
+dim(icd_9_codes_ccs) #8,016,284
+dim(reduced_diagnosis_icd_9)  #8,016,285
+dim(ccs_9)  #14800
+
+### ICD 10 ###
+reduced_diagnosis_icd_10 <- subset(reduced_diagnosis_icd, Type == "10") #520,609
+reduced_diagnosis_icd_10 <- reduced_diagnosis_icd_10[,-4]
+
+#join icd 10 codes from diagnosis table to ccs categories
+icd_10_codes_ccs <- inner_join(reduced_diagnosis_icd_10, ccs_10)
+dim(icd_10_codes_ccs) #512,891
+dim(reduced_diagnosis_icd_10) #520,609
+dim(ccs_10) #71807
+
+icd_codes_css <- rbind(icd_9_codes_ccs, icd_10_codes_ccs)
+str(icd_codes_css)
+
+```
+
+
+```{r}
+## Format ucpg table
+#extract each icd rank and recombine them to one dataset
+
+#reduced_cpt_ucpg_1 <- cpt_ucpg[c("PATIENT_ID", "Date" = "Date_of_Service_DS", "ICD9_CM_CODE_1")]
+#colnames(reduced_cpt_ucpg_1) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_2 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_2")]
+#colnames(reduced_cpt_ucpg_2) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_3 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_3")]
+#colnames(reduced_cpt_ucpg_3) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_4 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_4")]
+#colnames(reduced_cpt_ucpg_4) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_5 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_5")]
+#colnames(reduced_cpt_ucpg_5) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_6 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_6")]
+#colnames(reduced_cpt_ucpg_6) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_7 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_7")]
+#colnames(reduced_cpt_ucpg_7) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_8 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_8")]
+#colnames(reduced_cpt_ucpg_8) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_9 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_9")]
+#colnames(reduced_cpt_ucpg_9) <- c("PATIENT_ID", "Date", "Code")
+
+#reduced_cpt_ucpg <- rbind(reduced_cpt_ucpg_1, reduced_cpt_ucpg_2, reduced_cpt_ucpg_3, reduced_cpt_ucpg_4, reduced_cpt_ucpg_5, reduced_cpt_ucpg_6, reduced_cpt_ucpg_7, reduced_cpt_ucpg_8, reduced_cpt_ucpg_9)
+
+#reduced_cpt_ucpg <- reduced_cpt_ucpg[!is.na(reduced_cpt_ucpg$Code),]
+
+#reduced_cpt_ucpg$Code <- gsub("\\.", "", reduced_cpt_ucpg$Code) #remove decimal point
+#reduced_cpt_ucpg$Code <- str_pad(reduced_cpt_ucpg$Code, 5, "right", pad = "0") #pad so all codes are 4 characters long
+#modified_diagnosis_icd$Code <-as.factor(modified_diagnosis_icd$Code) #chanage to a factor
+
+#cpt_ucpg_codes_css <- left_join(reduced_cpt_ucpg, ccs)
+#dim(cpt_ucpg_codes_css)
+#dim(join)
+#dim(ccs)
+
+##evaluatign join
+#sum(is.na(join$CCS_CATEGORY))  #26812 = na's for 9; #369552 = na's for 10
+
+##Add icd codes from cpt_ucpg table to diagnosis table
+#icd_codes_css <- rbind(icd_codes_css, reduced_cpt_ucpg)
+#str(icd_codes_css)
+```
+
+```{r}
+## Reduce icd codes with ccs catgories to only patients in our cohort ###
+pts_diagnosis <- inner_join(patients, icd_codes_css) 
+dim(pts_diagnosis) #8,456,100
+dim(patients) #283,661
+dim(icd_codes_css) #8,529,175 
+
+
+#identify which observations occurred after First_Date_with_Hep_C_ICD_code
+pts_diagnosis$BeforeorAfter <- ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code < pts_diagnosis$Date, "After", 
+                                      ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code == pts_diagnosis$Date, "Same", "Before"))
+
+#include observations that occurred before first Hep C diagnosis only
+pts_diagnosis <- pts_diagnosis[(pts_diagnosis$BeforeorAfter == "Before"),] #8,099,653
+str(pts_diagnosis) #8,232,623
+
+
+
+#Create table with frequency of ccs categories
+ccs_freq_table <- as.data.frame.matrix(table(pts_diagnosis$PATIENT_ID, pts_diagnosis$CCS_CATEGORY))
+str(ccs_freq_table)
+
+ccs_freq_table$PATIENT_ID <- rownames(ccs_freq_table)  #Create a column for PATIENT_ID
+ccs_freq_table <- ccs_freq_table[c(282, 1:281)] #move PATIENT_ID column to columns 1
+colnames(ccs_freq_table)[2:282] <- paste("FREQ_ICD_CCS", colnames(ccs_freq_table[,c(2:282)]), sep = "_")#rename column names to icd_code_freq for columns 2:282
+rownames(ccs_freq_table) <- NULL#Remove row names from data.frame
+
+
+#join back with patients id's that were lost; 
+patients <- left_join(patients, ccs_freq_table)
+str(patients)
+
+# chanage NA's to zeros
+patients[,180:460][is.na(patients[,180:460])] <- 0  
+
+sum(is.na(patients))
+
+#Demographic variables = 4-7
+#ICD codes grouped by HEDIS value sets = 8-63
+#CPT codes by HEDIS value sets = 64-122
+#Encounter variables = 123-129
+#ACS variables = 130-171
+#Social variables = 172-179
+#ICD grouped by CCS variables = 180-460
+```
+
+```{r}
+#####  Double Check flat File & Export
+
+sum(is.na(patients))  # should be zero NA's
+
+dim(patients)  #232661   460
+str(patients)
+names(patients)
+
+
+write.csv(patients, "Z:/Flat File/patients_HEDIS_and_CCS_20170816file.csv")
+```
+
+```{r}
+
+######  STOP #####
+###  NOT FINISHED ####
+
+
+
+### CCS categories ####
+
+###  Import CCS CPT categories  ####
+
+cpt_CCS <- read.csv("Z:/Value Sets/2017_ccs_services_procedures.csv", header = TRUE, stringsAsFactor = FALSE)
+
+#Formatting CCS file
+cpt_CCS$Code.Range <- sub(".$", "", cpt_CCS$Code.Range)#remove last character in string
+cpt_CCS$Code.Range <- sub("^.", "", cpt_CCS$Code.Range)#remove first character in string
+
+cpt_CCS$Code.Range <- trimws(cpt_CCS$Code.Range, which = c("right")) #remove extra spaces
+#cpt_CCS$Code.Range <- str_pad(cpt_CCS$Code.Range, 5, "right", pad = "0") #add zeros at the end
+
+code_ranges <- strsplit(as.character(cpt_CCS$Code.Range), "-", fixed = TRUE)
+cpt_CCS$Code.Range_1 <- sapply(code_ranges, "[", 1)
+cpt_CCS$Code.Range_2 <- sapply(code_ranges, "[", 2)
+
+cpt_CCS <- cpt_CCS [c("X.ICD.9.CM.CODE.",  "CCS.CATEGORY", "X.CCS.CATEGORY.DESCRIPTION.")]
+colnames(cpt_CCS) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
+
+str(cpt_CCS)
+
+
+
+
+```
+```{r}
+####  COMBINE codes from cpt and cpt_ucpg ###
+
+reduced_cpt <- cpt[c("PATIENT_ID", "enc_dt_ds", "CPT", "CPT_Procedure", "QUANTITY")]
+colnames(reduced_cpt) <- c("PATIENT_ID", "Date", "Code", "Desc", "Quantity") 
+reduced_cpt$Code <- as.character(reduced_cpt$Code)
+
+sort(reduced_cpt$Code, decreasing = FALSE)
+
+#reduced_cpt_ucpg <- cpt_ucpg[c("Patient_Id", "Date_of_Service_DS", "CPT_Code")]
+#colnames(reduced_cpt_ucpg) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg$Desc <- NA
+
+### CHOOSE WHICH TABLES TO USE BY REMVOING TABLES!!##
+#all_cpt <- rbind(reduced_cpt, reduced_cpt_ucpg)
+all_cpt <- reduced_cpt
+str(all_cpt)
+
+
+#join cpt codes to ccs categories
+cpt_codes_ccs <- left_join(all_cpt, cpt_CCS, by = c("Code" = "Code.Range_2"))
+dim(cpt_codes_ccs)
+dim(all_cpt)
+dim(cpt_CCS)
+
+all_cpt <- ifelse(all_cpt)
+str(cpt_codes_ccs)
+
+sum(is.na(cpt_codes_ccs$CCS))
+
+subset(cpt_codes_ccs, !(is.na(CCS)))
