@@ -6,14 +6,13 @@ output: word_document
 ```{r}
 #libraries being used in this file
 library(dplyr)
-library(plyr)
 
 ```
 
 
-#Segment patients with hep c at first encounter vs. after
+########   Create Patient table with PATIENT ID, First_Date_with_Hep_C_ICD_code, HCV_STATUS, First_Encounter_Date, Observe_period_yrs ###
 
-#Create table patients
+##  Find patients with a Hep C icd code and the first date of that code.
 
 ```{r}
 ########Find Hep C patients from icd diagnosis codes
@@ -70,7 +69,7 @@ names(hep_c_patients_ids_first_hep_c_encounter_date)[names(hep_c_patients_ids_fi
 
 
 
-
+## Finding First Encounter Date and evaluating whether First Encounter Date was equal to or before First HEP C icd diagnosis date.
 ```{r}
 
 ##Finding first encounter date for Hep C patients
@@ -91,9 +90,9 @@ names(hep_c_patients_first_encounter_date)[names(hep_c_patients_first_encounter_
 hep_c_patients_first_encounter_date_and_first_hep_c_icd_code <- merge(hep_c_patients_first_encounter_date, hep_c_patients_ids_first_hep_c_encounter_date, by ="PATIENT_ID")
 
 
-#Evaluate whether first enounter date is greater, less or equal to first encounter date - patients diagnosed within our periods of interest are "TRUE"
-##BFORE = first encounter date is before first Hep C ICD code
-##SAME = first encounter date is the same as first Hep C ICD code
+#Evaluate whether first enounter date is greater, less or equal to first encounter date -
+##BEFORE = first encounter date is before first Hep C ICD code
+#SAME = first encounter date is the same as first Hep C ICD code
 hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$EncountervsICD <- ifelse(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$First_Encounter_Date < hep_c_patients_first_encounter_date_and_first_hep_c_icd_code$First_Date_with_Hep_C_ICD_code,  "BEFORE", "SAME")
 
 nrow(subset(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code, EncountervsICD == 'BEFORE'))  ##2485
@@ -103,7 +102,8 @@ str(hep_c_patients_first_encounter_date_and_first_hep_c_icd_code)
 ```
 
 
-
+##  Elimiinate patients with First Encounter Date = to First Hep C Date
+##  Add column that idenifies patients as HCV postive (1) or HCV negative (0)
 ```{r}
 
 
@@ -142,70 +142,96 @@ patients <- patients[,c(1, 3, 5)]
 #Filter encounter table on patietns in scope for analysis only
 pt_encounters <- encounters[encounters$PATIENT_ID %in% patients$PATIENT_ID,]
 
+#Time Difference between First Encounter and First Hep C icd code for Hep C patients or Decmeber 31, 2015 for non Hep C aptients
 #find min encounter date for hep C patients; change column name 
 pts_first_encounter_date <- aggregate(Enc_DT_DS~PATIENT_ID,  data = pt_encounters, min)
 names(pts_first_encounter_date)[names(pts_first_encounter_date) == "Enc_DT_DS"] <- "First_Encounter_Date"
 
+
 #merge first encounter date with patient data 
 patients <- left_join(patients, pts_first_encounter_date)
+
+#calcuate observation period for each patient; it will be the same for HCV negative patients; unique for each HCV postive patient
+observation_start_date <-as.Date.character("2011-01-01","%Y-%m-%d")
+patients$Observe_period_yrs <- ifelse(patients$HCV_STATUS == 0, 6,
+                                                     (difftime(patients$First_Date_with_Hep_C_ICD_code, observation_start_date, 
+                                                               units = "days")/365))
 
 ##remove patients without a first encounter date
 patients <- patients[(!is.na(patients$First_Encounter_Date)),]
 
+#rearranging columns
+patients <- patients[,c(1, 4, 2, 5, 3)]
+
 str(patients) #283661 patients
 
+#export to flat file folder
+#write.csv(patients, "Z:/Flat File/patients_list.csv", row.names = FALSE)
 
 ```
+
+
+####################  Variables from Demo Table ####################
+
 
 ```{r}
 #######Demo Varialbes#####
 
 #merge patient id's with demo table
 
-patients <- left_join(patients, demo) #add demographics table
-dim(patients)
+pts_demo <- left_join(patients, demo) #add demographics table
+dim(pts_demo)
 dim(demo)
-
+#str(pts_demo)
 
 ## Age ##
+
+#Binned  by generation cohort ##
+
+#Millennial - Born after 1980
+#Gen X - Born 1965 to 1980
+#Baby Boomer - Born 1946 to 1964
+#Silent - Born 1945 and before
+
+
+pts_demo$GENERATION_CATEGORY <- ifelse(pts_demo$DOB_DS < 1945/01/01, "Silent",
+                                ifelse(pts_demo$DOB_DS >= 1945/01/01 & pts_demo$DOB_DS < 1964/01/01,"Baby Boomer",
+                                ifelse(pts_demo$DOB_DS >= 1964/01/01 & pts_demo$DOB_DS <1980/01/01, "Gen X",
+                                ifelse(pts_demo$DOB_DS >= 1980/01/01, "Millennial", "Unknown"))))
+pts_demo$GENERATION_CATEGORY <- as.factor(pts_demo$GENERATION_CATEGORY)
+
+
+#Binned in 5 year catorgies ##
 library(eeptools)
-patients$AGE <- (age_calc(dob = patients$DOB_DS, enddate = patients$First_Encounter_Date, units = "years"))  #calcuate age at time of first encounter
-patients$AGE <- trunc(patients$AGE) #trunc to get whole number
-
+pts_demo$AGE <- (age_calc(dob = pts_demo$DOB_DS, enddate = pts_demo$First_Encounter_Date, units = "years"))  #calcuate age at time of first encounter
+pts_demo$AGE <- trunc(pts_demo$AGE) #trunc to get whole number
 ## Bin Age #
-patients$AGE_CATEGORY <- ifelse(patients$AGE >= 18 & patients$AGE <=24, "18-25",
-                                ifelse(patients$AGE >= 25 & patients$AGE <=29, "25-29",
-                                ifelse(patients$AGE >= 30 & patients$AGE <=34, "30-34",
-                                ifelse(patients$AGE >= 35 & patients$AGE <=39, "35-39",
-                                ifelse(patients$AGE >= 40 & patients$AGE <=44, "40-44",
-                                ifelse(patients$AGE >= 45 & patients$AGE <=49, "45-49",
-                                ifelse(patients$AGE >= 50 & patients$AGE <=54, "50-54",
-                                ifelse(patients$AGE >= 55 & patients$AGE <=59, "55-59",
-                                ifelse(patients$AGE >= 60 & patients$AGE <=64, "60-64",
-                                ifelse(patients$AGE >= 65 & patients$AGE <=69, "65-69",
-                                ifelse(patients$AGE >= 70 & patients$AGE <=74, "70-74",
-                                ifelse(patients$AGE >= 75 & patients$AGE <=79, "75-79",
-                                ifelse(patients$AGE >= 80 & patients$AGE <=84, "80-84",
-                                ifelse(patients$AGE >= 85 & patients$AGE <=89, "85-89",
-                                ifelse(patients$AGE >= 90 & patients$AGE <=94, "90-94",
-                                ifelse(patients$AGE >= 95 & patients$AGE <=99, "95-99",
-                                ifelse(patients$AGE >= 100 & patients$AGE <=104, "100-104",
-                                ifelse(patients$AGE >= 105 & patients$AGE <=109, "105-109",
-                                ifelse(patients$AGE >= 110 & patients$AGE <=115, "110-115", "Unknown")))))))))))))))))))       
-
-patients$AGE_CATEGORY <- as.factor(patients$AGE_CATEGORY) #changing data strcture to factor
+pts_demo$AGE_CATEGORY <- ifelse(pts_demo$AGE <=24, "<25",
+                                ifelse(pts_demo$AGE >= 25 & pts_demo$AGE <=29, "25-29",
+                                ifelse(pts_demo$AGE >= 30 & pts_demo$AGE <=34, "30-34",
+                                ifelse(pts_demo$AGE >= 35 & pts_demo$AGE <=39, "35-39",
+                                ifelse(pts_demo$AGE >= 40 & pts_demo$AGE <=44, "40-44",
+                                ifelse(pts_demo$AGE >= 45 & pts_demo$AGE <=49, "45-49",
+                                ifelse(pts_demo$AGE >= 50 & pts_demo$AGE <=54, "50-54",
+                                ifelse(pts_demo$AGE >= 55 & pts_demo$AGE <=59, "55-59",
+                                ifelse(pts_demo$AGE >= 60 & pts_demo$AGE <=64, "60-64",
+                                ifelse(pts_demo$AGE >= 65 & pts_demo$AGE <=69, "65-69",
+                                ifelse(pts_demo$AGE >= 70 & pts_demo$AGE <=74, "70-74",
+                                ifelse(pts_demo$AGE >= 75 & pts_demo$AGE <=79, "75-79",
+                                ifelse(pts_demo$AGE >= 80, "80+", "Unknown")))))))))))))       
+pts_demo$AGE_CATEGORY <- as.factor(pts_demo$AGE_CATEGORY) #changing data strcture to factor
 
 ## reduce columans
-patients <- patients[,c( "PATIENT_ID", "First_Date_with_Hep_C_ICD_code", "HCV_STATUS", "Gender", "Race", "Ethnicity", "language", "Marital_Status", "AGE_CATEGORY")] #reducing down the columns
-names(patients)[c(4:8)] <- c("GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS") #rename columns
+pts_demo <- pts_demo[,c( "PATIENT_ID", "Gender", "Race", "Ethnicity", "language", "Marital_Status", "AGE_CATEGORY", "GENERATION_CATEGORY")] #reducing down the columns
+names(pts_demo)[c(2:6)] <- c("GENDER", "RACE", "ETHNICITY", "LANGUAGE", "MARITAL_STATUS") #rename columns
 
 ## Remove NA's
-patients[,"RACE"][is.na(patients[,"RACE"])] <- "Unknown"
-patients[,"ETHNICITY"][is.na(patients[,"ETHNICITY"])] <- "Unknown"
+pts_demo[,"RACE"][is.na(pts_demo[,"RACE"])] <- "Unknown"
+pts_demo[,"ETHNICITY"][is.na(pts_demo[,"ETHNICITY"])] <- "Unknown"
 
 ## Language ##
 ## reduce Language levels to 3 
-levels(patients$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", 
+levels(pts_demo$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", 
                                "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", 
                                "English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", 
                                "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", 
@@ -215,11 +241,11 @@ levels(patients$LANGUAGE) <- c("Non-English", "Non-English", "Non-English", "Non
                                "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", "Non-English", 
                                "Non-English", "Non-English", "Non-English", "Non-English", "Unknown")
 
-patients[,"LANGUAGE"][is.na(patients[,"LANGUAGE"])] <- "Unknown" #changing NA's to "Unknonw"
+pts_demo[,"LANGUAGE"][is.na(pts_demo[,"LANGUAGE"])] <- "Unknown" #changing NA's to "Unknonw"
 
 ## Marital Status ##
 #reduce Marital Status levels to 4
-levels(patients$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "Unknown", "Divorced_Separated", 
+levels(pts_demo$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "Unknown", "Divorced_Separated", 
                                      "Divorced_Separated", "Unknown", "Unknown", "Unknown", 
                                      "Unknown", "Divorced_Separated", "Divorced_Separated", "Unknown", 
                                      "Unknown", "Married_Committed", "Unknown", "Unknown", 
@@ -230,17 +256,32 @@ levels(patients$MARITAL_STATUS) <- c("Married_Committed", "Married_Committed", "
                                     "Widowed", "Unknown", "Unknown", "Unknown", 
                                     "Unknown", "Unknown")
 
-patients[,"MARITAL_STATUS"][is.na(patients[,"MARITAL_STATUS"])] <- "Unknown"
+pts_demo[,"MARITAL_STATUS"][is.na(pts_demo[,"MARITAL_STATUS"])] <- "Unknown"
 
-str(patients)
-sum(is.na(patients))
+str(pts_demo)
+sum(is.na(pts_demo))
+
+#export to flat file folder
+write.csv(pts_demo, "Z:/Flat File/pts_demo.csv", row.names = FALSE)
+#Patient variables = 1
+#Demographic variables = 2-8
+
+
+##Join to Flat File
+flat_file <- left_join(patients, pts_demo)
+str(flat_file)
+#Patient variables = 1-5
+#Demographic variables = 6-12
 
 ```
 
 
+
+
+####################  Variables from ICD Diagnosis Table ####################
+
+
 ```{r}
-####  CINDY'S CODE #######
-#-----------------------------------
 
 ######ICD Diagnosis Codes Table#########
 
@@ -267,6 +308,8 @@ str(hep_c_project_HEDIS_value_sets) #2015 obserations
 
 #For ICD codes
 hep_c_project_HEDIS_icd_codes <- subset(hep_c_project_HEDIS_value_sets, Code_System == "ICD9CM" | Code_System == "ICD10CM") #only ICD diagnosis codes only
+
+hep_c_project_HEDIS_icd_codes[!duplicated(hep_c_project_HEDIS_icd_codes$Code),]
 
 hep_c_project_HEDIS_icd_codes$Code <- gsub("\\..*", "", hep_c_project_HEDIS_icd_codes$Code) #drop the decimal point and any numbers after
 hep_c_project_HEDIS_icd_codes$Code <- str_pad(hep_c_project_HEDIS_icd_codes$Code, 4, pad = "0") #pad so all codes are 4 characters long
@@ -324,15 +367,15 @@ str(modified_diagnosis_icd)
 
 
 #Change icd table so format of icd codes match HEDIS files
-modified_diagnosis_icd$Code <- gsub("\\..*", "", modified_diagnosis_icd$Code) #remove any nubers after decimal point
-modified_diagnosis_icd$Code <- str_pad(modified_diagnosis_icd$Code, 4, pad = "0") #pad so all codes are 4 characters long
+modified_diagnosis_icd$Code <- gsub("\\..*", "", modified_diagnosis_icd$Code) #remove any numbers after decimal point
+modified_diagnosis_icd$Code <- str_pad(modified_diagnosis_icd$Code, 4, pad = "0") #pad so all codes are 4 characters long; pads to the front of the string
 modified_diagnosis_icd$Code <-as.factor(modified_diagnosis_icd$Code) #chanage to a factor
 
-###  Join patient id table to diagnosis_icd table to bring in first Hep C date
 
+###  Join patient id table to diagnosis_icd table to bring in first Hep C date
 pts_diagnosis <- inner_join(patients, modified_diagnosis_icd) #8,479,127 rows
-dim(pts_diagnosis)
-str(pts_diagnosis)
+#dim(pts_diagnosis)
+#str(pts_diagnosis)
 
 #identify which observations occurred after First_Date_with_Hep_C_ICD_code
 pts_diagnosis$BeforeorAfter <- ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code < pts_diagnosis$Date, "After", 
@@ -345,6 +388,29 @@ pts_diagnosis$BeforeorAfter <- ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_co
 pt_icd_codes <- pts_diagnosis[(pts_diagnosis$BeforeorAfter == "Before"),]
 
 str(pt_icd_codes)
+```
+
+
+
+```{r}
+###Evaluating Hep codes that occur before what we are sayingis "first icd diagnois date"
+hep_codes_left <- subset(pt_icd_codes, 
+                        Code == "0070"  #Acute hepatitis C with hepatic coma (icd9)
+                       | Code == "B1710" #Acute hepatitis C without hepatic coma (icd10)
+
+) #3395 codes
+hep_codes_left[!duplicated(hep_codes_left),] #2945
+hep_codes_left$Desc<-droplevels(hep_codes_left$Desc)
+table(hep_codes_left$Desc)
+length(unique(hep_codes_left$PATIENT_ID))  #737; 
+subset(hep_codes_left, HCV_STATUS ==0) 
+
+
+hep__c_codes_left <- hep_codes_left[grep("HEPATITIS C", hep_codes_left$Desc), ] #100 (41- neg and 59 - pos)
+length(unique(hep__c_codes_left$PATIENT_ID)) #83 unique patients - 37 neg and 46 pos
+table(hep__c_codes_left$PATIENT_ID, hep__c_codes_left$HCV_STATUS)
+pos <- subset(hep__c_codes_left, HCV_STATUS ==1) 
+length(unique(pos$PATIENT_ID)) #83 unique patients
 
 
 ```
@@ -352,6 +418,10 @@ str(pt_icd_codes)
 
 
 ```{r}
+
+####  Creating Tables of ICD Counts, ICD Averages, and ICD Binary (1=ICD present before first HEp C icd code or 0=ICD not present before first Hep C icd code)#
+
+
 ##Join value set and pts_diagnosis code to identify value set name of each icd code
 pt_icd_codes_value_sets <- inner_join(hep_c_project_HEDIS_icd_codes, pt_icd_codes)
 dim(pt_icd_codes)
@@ -364,7 +434,7 @@ dim(pt_icd_codes_value_sets)
 
 #Create table with frequency of icd codes
 icd_freq_table <- as.data.frame.matrix(table(pt_icd_codes_value_sets$PATIENT_ID, pt_icd_codes_value_sets$Code))
-str(icd_freq_table)
+#str(icd_freq_table)
 
 icd_freq_table$PATIENT_ID <- rownames(icd_freq_table)  #Create a column for PATIENT_ID
 icd_freq_table <- icd_freq_table[c(57, 1:56)] #move PATIENT_ID column to columns 1
@@ -372,13 +442,262 @@ colnames(icd_freq_table)[2:57] <- paste("FREQ_ICD", colnames(icd_freq_table[,c(2
 rownames(icd_freq_table) <- NULL#Remove row names from data.frame
 
 #join back with patients id's that were lost; 
-patients <- left_join(patients, icd_freq_table)
-str(patients)
-names(patients)
+pts_icd <- left_join(patients, icd_freq_table)
+str(pts_icd)
+
+#Divide Freq by length of observtion period (in years) to calculate average numbe per observation perios
+pts_icd[,62:117] <- apply(pts_icd[,6:ncol(pts_icd)], 2, function (x) {
+          x/pts_icd$Observe_period_yrs})
+
+#Rename Average columns
+newnames <- (gsub('FREQ_', "AVERAGE_", colnames(pts_icd[,6:61])))
+colnames(pts_icd)[62:117] <- paste(newnames)     
+str(pts_icd)
+names(pts_icd)
+sum(is.na(pts_icd))
+
+###Presence of ICD diagnosis code - HEDIS 
+# 0 = never had the icd code
+# 1 = had the icd code at least once
+
+pts_icd[,118:173] <- apply(pts_icd[,6:117], c(1,2), function(x) {
+ ifelse(x == 0, 0, 1)})
+
+newnames2 <- (gsub('FREQ_', "BINARY_", colnames(pts_icd[,6:61])))
+colnames(pts_icd)[118:173] <- paste(newnames2)
+
+dim(pts_icd)
+names(pts_icd)
+str(pts_icd)
 
 # chanage NA's to zeros
-patients[,10:65][is.na(patients[,10:65])] <- 0  
+pts_icd[,6:ncol(pts_icd)][is.na(pts_icd[,6:ncol(pts_icd)])] <- 0 
+pts_icd <- pts_icd[-c(2:5)]
+
+#export HEDIS icd variables to flat file folder
+write.csv(pts_icd, "Z:/Flat File/pts_HEDIS_ICD.csv", row.names = FALSE)
+  #Patient variables = 1
+  #Freq HEDIS ICD codes = 2 - 57 (Baseline)
+  #Average HEDIS ICD codes = 58 - 113
+  #Binary HEDIS ICD codes = 114 - 169
+
+
+#Join to flat file - Merge with patient info, demo variables, and ICD variables
+flat_file <- left_join(flat_file, pts_icd)
+str(flat_file)
+names(flat_file)
+  #Patient variables = 1-5
+  #Demographic variables = 6-12
+  #Freq HEDIS ICD codes = 13- 68
+  #Average HEDIS ICD codes = 69 - 124
+  #Binary HEDIS ICD codes = 125 - 180
 ```
+
+```{r}
+
+#################### ICD Diagnosis Codes -  CCS categories ##########
+
+###  Import CCS  9 categories  ####
+
+ccs_9 <- read.csv("Z:/Value Sets/CCSCategoryNames_ICD9.csv", header = TRUE, stringsAsFactor = FALSE)
+
+#Formatting CCS file
+ccs_9$X.ICD.9.CM.CODE. <- sub(".$", "", ccs_9$X.ICD.9.CM.CODE.)#remove last character in string
+ccs_9$X.ICD.9.CM.CODE. <- sub("^.", "", ccs_9$X.ICD.9.CM.CODE.)#remove first character in string
+
+ccs_9$X.ICD.9.CM.CODE. <- trimws(ccs_9$X.ICD.9.CM.CODE., which = c("right")) #remove extra spaces
+ccs_9$X.ICD.9.CM.CODE. <- str_pad(ccs_9$X.ICD.9.CM.CODE., 5, "right", pad = "0") #add zeros at the end
+
+ccs_9 <- ccs_9 [c("X.ICD.9.CM.CODE.",  "CCS.CATEGORY", "X.CCS.CATEGORY.DESCRIPTION.")]
+colnames(ccs_9) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
+ccs_9 <- ccs_9[!duplicated(ccs_9$Code),]
+str(ccs_9)
+
+###  Import CCS  10 categories  ####
+
+ccs_10 <- read.csv("Z:/Value Sets/ccs_dx_icd10cm_2017.csv", header = TRUE, stringsAsFactor = FALSE)
+
+#Formatting CCS file
+ccs_10$X.ICD.10.CM.CODE. <- sub(".$", "", ccs_10$X.ICD.10.CM.CODE.)#remove last character in string
+ccs_10$X.ICD.10.CM.CODE. <- sub("^.", "", ccs_10$X.ICD.10.CM.CODE.)#remove first character in string
+
+ccs_10$X.CCS.CATEGORY. <- sub(".$", "", ccs_10$X.CCS.CATEGORY.)#remove last character in string
+ccs_10$X.CCS.CATEGORY. <- sub("^.", "", ccs_10$X.CCS.CATEGORY.)#remove first character in string
+
+ccs_10 <- ccs_10 [c("X.ICD.10.CM.CODE.",  "X.CCS.CATEGORY.", "X.CCS.CATEGORY.DESCRIPTION.")]
+colnames(ccs_10) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
+str(ccs_10)
+```
+
+
+
+```{r}
+
+
+#### icd Diagnosis table - ICD Codes ####
+#### Map ICD codes to CCS categories  ###########
+
+reduced_diagnosis_icd <- diagnosis_icd[c("PATIENT_ID", "enc_dt_ds", "icd_dx", "ICD_TYPE", "icd_diagnosis")]
+colnames(reduced_diagnosis_icd) <- c("PATIENT_ID", "Date", "Code", "Type", "Desc")
+
+### ICD 9 ###
+reduced_diagnosis_icd_9 <- subset(reduced_diagnosis_icd, Type == "9") #8,016,285
+reduced_diagnosis_icd_9 <- reduced_diagnosis_icd_9[,-4]
+
+reduced_diagnosis_icd_9$Code <- gsub("\\.", "", reduced_diagnosis_icd_9$Code) #remove decimal point
+reduced_diagnosis_icd_9$Code <- str_pad(reduced_diagnosis_icd_9$Code, 5, "right", pad = "0") #pad so all codes are 4 characters long
+
+#join icd 9 codes from diagnosis table to ccs categories
+icd_9_codes_ccs <- inner_join(reduced_diagnosis_icd_9, ccs_9)
+dim(icd_9_codes_ccs) #8,016,284
+dim(reduced_diagnosis_icd_9)  #8,016,285
+dim(ccs_9)  #14800
+
+### ICD 10 ###
+reduced_diagnosis_icd_10 <- subset(reduced_diagnosis_icd, Type == "10") #520,609
+reduced_diagnosis_icd_10 <- reduced_diagnosis_icd_10[,-4]
+
+#join icd 10 codes from diagnosis table to ccs categories
+icd_10_codes_ccs <- inner_join(reduced_diagnosis_icd_10, ccs_10)
+dim(icd_10_codes_ccs) #512,891
+dim(reduced_diagnosis_icd_10) #520,609
+dim(ccs_10) #71807
+
+icd_codes_css <- rbind(icd_9_codes_ccs, icd_10_codes_ccs)
+str(icd_codes_css)
+
+```
+
+
+```{r}
+## Format ucpg table
+#extract each icd rank and recombine them to one dataset
+
+#reduced_cpt_ucpg_1 <- cpt_ucpg[c("PATIENT_ID", "Date" = "Date_of_Service_DS", "ICD9_CM_CODE_1")]
+#colnames(reduced_cpt_ucpg_1) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_2 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_2")]
+#colnames(reduced_cpt_ucpg_2) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_3 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_3")]
+#colnames(reduced_cpt_ucpg_3) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_4 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_4")]
+#colnames(reduced_cpt_ucpg_4) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_5 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_5")]
+#colnames(reduced_cpt_ucpg_5) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_6 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_6")]
+#colnames(reduced_cpt_ucpg_6) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_7 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_7")]
+#colnames(reduced_cpt_ucpg_7) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_8 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_8")]
+#colnames(reduced_cpt_ucpg_8) <- c("PATIENT_ID", "Date", "Code")
+#reduced_cpt_ucpg_9 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_9")]
+#colnames(reduced_cpt_ucpg_9) <- c("PATIENT_ID", "Date", "Code")
+
+#reduced_cpt_ucpg <- rbind(reduced_cpt_ucpg_1, reduced_cpt_ucpg_2, reduced_cpt_ucpg_3, reduced_cpt_ucpg_4, reduced_cpt_ucpg_5, reduced_cpt_ucpg_6, reduced_cpt_ucpg_7, reduced_cpt_ucpg_8, reduced_cpt_ucpg_9)
+
+#reduced_cpt_ucpg <- reduced_cpt_ucpg[!is.na(reduced_cpt_ucpg$Code),]
+
+#reduced_cpt_ucpg$Code <- gsub("\\.", "", reduced_cpt_ucpg$Code) #remove decimal point
+#reduced_cpt_ucpg$Code <- str_pad(reduced_cpt_ucpg$Code, 5, "right", pad = "0") #pad so all codes are 4 characters long
+#modified_diagnosis_icd$Code <-as.factor(modified_diagnosis_icd$Code) #chanage to a factor
+
+#cpt_ucpg_codes_css <- left_join(reduced_cpt_ucpg, ccs)
+#dim(cpt_ucpg_codes_css)
+#dim(join)
+#dim(ccs)
+
+##evaluatign join
+#sum(is.na(join$CCS_CATEGORY))  #26812 = na's for 9; #369552 = na's for 10
+
+##Add icd codes from cpt_ucpg table to diagnosis table
+#icd_codes_css <- rbind(icd_codes_css, reduced_cpt_ucpg)
+#str(icd_codes_css)
+```
+
+```{r}
+## Reduce icd codes with ccs catgories to only patients in our cohort ###
+pts_CCS_ICD_codes <- inner_join(patients, icd_codes_css) 
+dim(pts_CCS_ICD_codes) #8,456,100
+dim(patients) #283,661
+dim(icd_codes_css) #8,529,175 
+
+
+#identify which observations occurred after First_Date_with_Hep_C_ICD_code
+pts_CCS_ICD_codes$BeforeorAfter <- ifelse(pts_CCS_ICD_codes$First_Date_with_Hep_C_ICD_code < pts_CCS_ICD_codes$Date, "After", 
+                                      ifelse(pts_CCS_ICD_codes$First_Date_with_Hep_C_ICD_code == pts_CCS_ICD_codes$Date, "Same", "Before"))
+
+#include observations that occurred before first Hep C diagnosis only
+pts_CCS_ICD_codes <- pts_CCS_ICD_codes[(pts_CCS_ICD_codes$BeforeorAfter == "Before"),] #8,099,653
+str(pts_CCS_ICD_codes) #8,232,623
+
+#Create table with frequency of ccs categories
+ccs_freq_table <- as.data.frame.matrix(table(pts_CCS_ICD_codes$PATIENT_ID, pts_CCS_ICD_codes$CCS_CATEGORY))
+str(ccs_freq_table)
+
+ccs_freq_table$PATIENT_ID <- rownames(ccs_freq_table)  #Create a column for PATIENT_ID
+ccs_freq_table <- ccs_freq_table[c(282, 1:281)] #move PATIENT_ID column to columns 1
+colnames(ccs_freq_table)[2:282] <- paste("FREQ_ICD_CCS", colnames(ccs_freq_table[,c(2:282)]), sep = "_")#rename column names to icd_code_freq for columns 2:282
+rownames(ccs_freq_table) <- NULL#Remove row names from data.frame
+
+#join back with patients id's that were lost; 
+ccs_table <- left_join(patients, ccs_freq_table)
+str(ccs_table)
+names(ccs_table)
+
+
+#Divide Freq by length of observtion period (in years) to calculate average numbe per observation perios
+
+ccs_table[,287:567] <- apply(ccs_table[,6:286], 2, function (x) {
+          x/ccs_table$Observe_period_yrs})
+
+#Rename Average columns
+CCS_newnames <- (gsub('FREQ_', "AVERAGE_", colnames(ccs_table[,6:286])))
+colnames(ccs_table)[287:567] <- paste(CCS_newnames)     
+names(ccs_table)
+
+###Presence of ICD diagnosis code - HEDIS 
+# 0 = never had the icd code
+# 1 = had the icd code at least once
+
+ccs_table[,568:847] <- apply(ccs_table[,6:286], c(1,2), function(x) {
+ ifelse(x == 0, 0, 1)})
+
+CCS_newnames2 <- (gsub('FREQ_', "BINARY_", colnames(ccs_table[,6:286])))
+colnames(ccs_table)[568:847] <- paste(CCS_newnames2)
+
+names(ccs_table)
+str(ccs_table)
+
+# chanage NA's to zeros
+ccs_table[,6:ncol(ccs_table)][is.na(ccs_table[,6:ncol(ccs_table)])] <- 0 
+ccs_table <- ccs_table[-c(2:286)]#remove patient variables and FREQ variables
+
+sum(is.na(ccs_table))
+dim(ccs_table)
+
+#export CCS icd variables to flat file folder
+write.csv(ccs_table, "Z:/Flat File/pts_CCS_ICD.csv", row.names = FALSE)
+  #Patient variables = 1
+  #Average CCS ICD codes = 2 - 282
+  #Binary CCS ICD codes = 283 - 562
+
+
+#Join to flat file - Merge with patient info, demo variables, and ICD variables
+flat_file <- left_join(flat_file, ccs_table)
+str(flat_file)
+
+  #Patient variables = 1-5
+  #Demographic variables = 6-12
+  #Freq HEDIS ICD codes = 13- 68
+  #Average HEDIS ICD codes = 69 - 124
+  #Binary HEDIS ICD codes = 125 - 180
+  #Average CCS ICD codes = 181 - 461
+  #Binary CCS ICD codes = 462 - 741
+```
+
+
+####################  Variables from CPT and ICD_procedure table ####################
+
+
 
 ```{r}
 ###  CPT Tables #######
@@ -418,10 +737,9 @@ str(all_cpt)
 
 ###  Join patient id table to all cpt table
 pts_cpt <- inner_join(patients, all_cpt) 
-dim(patients)
-dim(all_cpt)
-dim(pts_cpt)
-str(pts_cpt)
+dim(patients) #283,661
+dim(all_cpt) #741,948
+dim(pts_cpt)  #524,693
 
 #identify which observations occurred after First_Date_with_Hep_C_ICD_code
 pts_cpt$BeforeorAfter <-ifelse(is.na(pts_cpt$First_Date_with_Hep_C_ICD_code), "After",
@@ -439,9 +757,9 @@ str(pt_cpt_codes)
 
 ##Join value set and pts_cpt code to identify value set name of each icd code
 pt_cpt_codes_value_sets <- inner_join(pt_cpt_codes, hep_c_project_HEDIS_procedure_codes)
-dim(pt_cpt_codes)
-dim(hep_c_project_HEDIS_procedure_codes)
-dim(pt_cpt_codes_value_sets)
+dim(pt_cpt_codes) #524,693
+dim(hep_c_project_HEDIS_procedure_codes) #237
+dim(pt_cpt_codes_value_sets) #13856
 
 
 #Create table with frequency of icd codes
@@ -452,69 +770,229 @@ cpt_freq_table$PATIENT_ID <- rownames(cpt_freq_table) #Create a column for PATIE
 cpt_freq_table <- cpt_freq_table[c(60, 1:59)]#move PATIENT_ID column to columns 1
 rownames(cpt_freq_table) <- NULL#Remove row names from data.frame
 
-#rename column names to icd_code_freq for columns 2:98
+#rename column names to cpt_freq_table for columns 2:60
 colnames(cpt_freq_table)[2:60] <- paste("FREQ_PROC", colnames(cpt_freq_table[,c(2:60)]), sep = "_")
 
-#join back with all patients that were lost; 
-patients <- left_join(patients, cpt_freq_table)
-str(patients)
+#join back with patients id's that were lost; 
+cpt_HEDIS__table <- left_join(patients, cpt_freq_table)
 
+str(cpt_HEDIS__table)
+names(cpt_HEDIS__table)
+
+#Divide Freq by length of observtion period (in years) to calculate average numbe per observation perios
+cpt_HEDIS__table[,65:123] <- apply(cpt_HEDIS__table[,6:64], 2, function (x) {
+          x/cpt_HEDIS__table$Observe_period_yrs})
+
+#Rename Average columns
+cpt_HEDIS_newnames <- (gsub('FREQ_', "AVERAGE_", colnames(cpt_HEDIS__table[,6:64])))
+colnames(cpt_HEDIS__table)[65:123] <- paste(cpt_HEDIS_newnames)     
+names(cpt_HEDIS__table)
+
+###Presence of ICD diagnosis code - HEDIS 
+# 0 = never had the icd code
+# 1 = had the icd code at least once
+
+cpt_HEDIS__table[,124:182] <- apply(cpt_HEDIS__table[,6:64], c(1,2), function(x) {
+ ifelse(x == 0, 0, 1)})
+
+cpt_HEDIS_newnames2 <- (gsub('FREQ_', "BINARY_", colnames(cpt_HEDIS__table[,6:64])))
+colnames(cpt_HEDIS__table)[124:182] <- paste(cpt_HEDIS_newnames2)
+
+names(cpt_HEDIS__table)
+str(cpt_HEDIS__table)
 
 # chanage NA's to zeros
-patients[,66:124][is.na(patients[,66:124])] <- 0
+cpt_HEDIS__table[,6:ncol(cpt_HEDIS__table)][is.na(cpt_HEDIS__table[,6:ncol(cpt_HEDIS__table)])] <- 0 
+cpt_HEDIS__table <- cpt_HEDIS__table[-c(2:5)]
 
-sum(is.na(patients))
+sum(is.na(cpt_HEDIS__table))
+
+names(cpt_HEDIS__table)
+
+#export HEDIS PROC variables to flat file folder
+write.csv(cpt_HEDIS__table, "Z:/Flat File/pts_cpt_HEDIS.csv", row.names = FALSE)
+  #Patient variables = 1
+  #Freq HEDIS PROC codes = 2 - 60
+  #Average HEDIS PROC codes = 61 - 119
+  #Binary HEDIS PROC codes = 120 - 178
+#FREQ was in baseline model
+
+
+#Join to flat file - Merge with patient info, demo variables, and ICD variables
+flat_file <- left_join(flat_file, cpt_HEDIS__table)
+str(flat_file)
+names(flat_file)
+  #Patient variables = 1-5
+  #Demographic variables = 6-12
+  #Freq HEDIS ICD codes = 13- 68
+  #Average HEDIS ICD codes = 69 - 124
+  #Binary HEDIS ICD codes = 125 - 180
+  #Average CCS ICD codes = 181 - 461
+  #Binary CCS ICD codes = 462 - 741
+  #Freq HEDIS PROC codes = 742 - 800
+  #Average HEDIS PROC codes = 801 - 859
+  #Binary HEDIS PROC codes = 860 - 918
 
 ```
+
+
+
+####################  Variables from Encounter Table ####################
+
 
 
 ```{r}
 ####  Encounter Variables ####
 
-encounters_first_hep_c_encounter <- inner_join(encounters,patients)
+min(encounters$Enc_DT_DS)  #2011-01-03
+max(encounters$Enc_DT_DS)  #2016-12-30
+
+pts_encounters <- inner_join(encounters,patients) #11,850,016 rows
 
 ##TRUE = Encounter was before first Hep C icd code
 ##FALSE = Encounter was NOT before first Hep C icd code
-encounters_first_hep_c_encounter$before_diagnosis <- ifelse(encounters_first_hep_c_encounter$Enc_DT_DS < encounters_first_hep_c_encounter$First_Date_with_Hep_C_ICD_code, "TRUE", "FALSE") #Evaluate whether encounter was before or after first Hep C icd code date
-encounters_first_hep_c_encounter <- encounters_first_hep_c_encounter[(encounters_first_hep_c_encounter$before_diagnosis=="TRUE"),] #Remove "False"
+pts_encounters$before_diagnosis <- ifelse(pts_encounters$Enc_DT_DS < pts_encounters$First_Date_with_Hep_C_ICD_code, "TRUE", "FALSE") #Evaluate whether encounter was before or after first Hep C icd code date
+pts_encounters <- pts_encounters[(pts_encounters$before_diagnosis=="TRUE"),]  #Remove "False" #11,568,781 rosw
+dim(pts_encounters)
+
 
 
 #Total_Num_Encounters
-patient_ID_encounters<-data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID))
+patient_ID_encounters<-data.frame(table(pts_encounters$PATIENT_ID))
 colnames(patient_ID_encounters) <-  c("PATIENT_ID", "Total_Num_Encounters")
-patients <- left_join(patients,patient_ID_encounters)
-patients[,"Total_Num_Encounters"][is.na(patients[,"Total_Num_Encounters"])] <- 0
+encounter_variables <- left_join(patients,patient_ID_encounters)
+#Avg_Num_Encounters_Month
+encounter_variables$Avg_Num_Encounters_yr <- encounter_variables$Total_Num_Encounters / encounter_variables$Observe_period_yrs
 
-#Total_Num_Outpt_Visits
-patient_ID_encounters_outpt <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$Enc_EIO %in% c("O", "I, O", "E, O", "E, I, O")]))
-colnames(patient_ID_encounters_outpt) <-  c("PATIENT_ID", "Total_Num_Outpt_Visits")
-patients <- left_join(patients,patient_ID_encounters_outpt)
-patients[,"Total_Num_Outpt_Visits"][is.na(patients[,"Total_Num_Outpt_Visits"])] <- 0
+#Total_Num_Outpt_Encounters
+patient_ID_encounters_outpt <- data.frame(table(pts_encounters$PATIENT_ID[pts_encounters$Enc_EIO %in% c("O", "I, O", "E, O", "E, I, O")]))
+colnames(patient_ID_encounters_outpt) <-  c("PATIENT_ID", "Total_Num_Outpt_Encounters")
+encounter_variables <- left_join(encounter_variables,patient_ID_encounters_outpt)
+#Avg_Num_Outpt_Encounters
+encounter_variables$Avg_Num_Outpt_Encounters_yr <- encounter_variables$Total_Num_Outpt_Encounters  / encounter_variables$Observe_period_yrs
 
-#Total_Num_Inpt_Admissions
-patient_ID_encounters_inpt <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I")]))
-colnames(patient_ID_encounters_inpt) <-  c("PATIENT_ID", "Total_Num_Inpt_Admissions")
-patients <- left_join(patients,patient_ID_encounters_inpt)
-patients[,"Total_Num_Inpt_Admissions"][is.na(patients[,"Total_Num_Inpt_Admissions"])] <- 0
+
+
+##Inpatient Visits
+#Total_Num_Inpt_Encounters
+patient_ID_encounters_inpt <- data.frame(table(pts_encounters$PATIENT_ID[pts_encounters$Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I")]))
+colnames(patient_ID_encounters_inpt) <-  c("PATIENT_ID", "Total_Num_Inpt_Encounters")
+encounter_variables <- left_join(encounter_variables,patient_ID_encounters_inpt)
+#Avg_Num_Inpt_Encounters
+encounter_variables$Avg_Num_Inpt_Encounters_yr <- encounter_variables$Total_Num_Inpt_Encounters / encounter_variables$Observe_period_yrs
 
 #Average_LOS_DAYS
-average_LOS_Days <- aggregate(LOS_Days ~ PATIENT_ID, encounters_first_hep_c_encounter, mean, na.rm=TRUE)
+LOS_Days <- subset(pts_encounters, LOS_Days >0)
+average_LOS_Days <- aggregate(LOS_Days ~ PATIENT_ID, LOS_Days, mean, na.rm=TRUE)
 average_LOS_Days$LOS_Days <- round(average_LOS_Days$LOS_Days, 2)
 colnames(average_LOS_Days) <-  c("PATIENT_ID", "average_LOS_Days")
-patients <- left_join(patients,average_LOS_Days)
-patients[,"average_LOS_Days"][is.na(patients[,"average_LOS_Days"])] <- 0
+encounter_variables <- left_join(encounter_variables,average_LOS_Days)
 
-#Total_Num_ED_Visits
-patient_ID_encounters_ED <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$Enc_EIO %in% c("E, I", "E", "E, I, O", "E, O")]))
-colnames(patient_ID_encounters_ED) <-  c("PATIENT_ID", "Total_Num_ED_Visits")
-patients <- left_join(patients,patient_ID_encounters_ED)
-patients[,"Total_Num_ED_Visits"][is.na(patients[,"Total_Num_ED_Visits"])] <- 0
+#Avg_Num_Inpt_Admits
+patient_ID_Inpt_Admits <- as.data.frame(table(LOS_Days$PATIENT_ID))
+colnames(patient_ID_Inpt_Admits) <-  c("PATIENT_ID", "Total_Num_Inpt_Admits")
+encounter_variables <- left_join(encounter_variables,patient_ID_Inpt_Admits)
+encounter_variables$Avg_Num_Inpt_Admits_yr <- encounter_variables$Total_Num_Inpt_Admits / encounter_variables$Observe_period_yrs
 
+
+###ED visits
+#Total_Num_ED_Encounters
+patient_ID_encounters_ED <- data.frame(table(pts_encounters$PATIENT_ID[pts_encounters$Enc_EIO %in% c("E, I", "E", "E, I, O", "E, O")]))
+colnames(patient_ID_encounters_ED) <-  c("PATIENT_ID", "Total_Num_ED_Encounters")
+encounter_variables <- left_join(encounter_variables,patient_ID_encounters_ED)
+
+#Avg_Num_ED_Encounters
+encounter_variables$Avg_Num_ED_Encounters_yr <- encounter_variables$Total_Num_ED_Encounters / encounter_variables$Observe_period_yrs
+
+#Avg_Num_ED_Visits
+patient_ID_ED_visits <- data.frame(table(pts_encounters$PATIENT_ID, is.na(pts_encounters$ED_Arrival_DTTM_DS)))
+patient_ID_ED_visits <- subset(patient_ID_ED_visits, Var2 == "FALSE")
+patient_ID_ED_visits <- patient_ID_ED_visits[,-c(2)]
+colnames(patient_ID_ED_visits) <-  c("PATIENT_ID", "Total_Num_ED_Visits")
+encounter_variables <- left_join(encounter_variables,patient_ID_ED_visits)
+encounter_variables$Avg_Num_ED_Visits_yr <- encounter_variables$Total_Num_ED_Visits / encounter_variables$Observe_period_yrs
+encounter_variables <- encounter_variables[-c(15)]
+
+##Billabe Encounters
+#Total_Num_of_Encounters_by_billable_type
+enc_billable_freq_table <- as.data.frame.matrix(table(pts_encounters$PATIENT_ID, is.na(pts_encounters$ENCOUNTER_ID)))
+str(enc_billable_freq_table)
+enc_billable_freq_table$PATIENT_ID <- rownames(enc_billable_freq_table) #Create a column for PATIENT_ID
+enc_billable_freq_table <- enc_billable_freq_table[c(3, 1:2)]#move PATIENT_ID column to columns 1
+rownames(enc_billable_freq_table) <- NULL#Remove row names from data.frame
+enc_billable_freq_table <- enc_billable_freq_table[-c(3)]
+
+#rename column names
+colnames(enc_billable_freq_table)[2] <- paste("Total_Num_Billable_Enc")
+enc_billable_freq_table$Total_Num_Billable_Enc <- as.numeric(enc_billable_freq_table$Total_Num_Billable_Enc)
+#colnames(enc_billable_freq_table)[3] <- paste("Total_Num_Non_Billable_Enc")
+#enc_billable_freq_table$Total_Num_Non_Billable_Enc <- as.numeric(enc_billable_freq_table$Total_Num_Non_Billable_Enc)
+
+#join back with all patients that were lost; 
+encounter_variables <- left_join(encounter_variables, enc_billable_freq_table)
+
+#Divide Freq by length of observtion period (in years) to calculate average number per observation perios
+encounter_variables$Avg_Num_Billable_Enc_yr <- encounter_variables$Total_Num_Billable_Enc / encounter_variables$Observe_period_yrs
+encounter_variables <- encounter_variables[-c(16)]
+
+
+
+#Total_Num_of_Encounters_by_Type
+enc_type_freq_table <- as.data.frame.matrix(table(pts_encounters$PATIENT_ID, pts_encounters$Enc_Type_c))
+enc_type_freq_table$PATIENT_ID <- rownames(enc_type_freq_table) #Create a column for PATIENT_ID
+enc_type_freq_table <- enc_type_freq_table[c(50, 1:49)]#move PATIENT_ID column to columns 1
+rownames(enc_type_freq_table) <- NULL#Remove row names from data.frame
+#rename column names
+colnames(enc_type_freq_table)[6:54] <- paste("FREQ_ENC_TYPE", colnames(enc_type_freq_table[,c(6:54)]), sep = "_")
+names(enc_type_freq_table)
+table(pts_encounters$Enc_Type_c)
+
+#add back information on observation period
+enc_type_table <- left_join(patients, enc_type_freq_table)
+names(enc_type_table)
+
+#Divide Freq by length of observtion period (in years) to calculate average number per observation perios
+enc_type_table[,55:103] <- apply(enc_type_table[,6:54], 2, function (x) {
+          x/enc_type_table$Observe_period_yrs})
+
+#Rename Average columns
+enc_type_newnames <- (gsub('FREQ_', "AVERAGE_", colnames(enc_type_table[,6:54])))
+colnames(enc_type_table)[55:103] <- paste(enc_type_newnames)     
+names(enc_type_table)
+#eliminiate FREQ variables
+enc_type_table <- enc_type_table[c(1, 55:103)]
+
+#Join with other encounter variables
+encounter_variables <- left_join(encounter_variables, enc_type_table)
+names(encounter_variables)
+
+#replace NA's with zeros
+encounter_variables[,6:ncol(encounter_variables)][is.na(encounter_variables[,6:ncol(encounter_variables)])] <- 0
+
+
+#some columsn with very low numbers???????/
+colSums(encounter_variables[6:ncol(encounter_variables)])
+
+encounter_variables <- encounter_variables[,-c(18, 21, 29, 30, 32, 33, 35, 36, 44, 55)]
+
+```
+
+
+```{r}
+####PCP History ###
+
+#Total_Num_of_Unique_
+
+#table(encounters$First_Enc_Service)
+#sum(!is.na(encounters$Appt_Primary_Location))
+```
+
+```{r}
 ##Insurance_Aided - Did the patient ever recieve aid to cover medical bills?  
 #TRUE = Fin Class listed "Charity", "Grants & Funds" or "medicaid" at least once in medical history
 #FALSE = Fin Class wasd NEVER listed as "Charity", "Grants & Funds" or "medicaid"; no record in Fin Class is FALSE - should it be changed to unknown?
 
-levels(encounters_first_hep_c_encounter$Fin_Class) <- c("Insured", "Insured", "Aided", "Aided", "Insured", 
+levels(pts_encounters$Fin_Class) <- c("Insured", "Insured", "Aided", "Aided", "Insured", 
                                                         "Insured", "Aided", "Insured", "Insured", "Insured", 
                                                         "Insured", "Insured", "Insured", "Aided", "Aided", 
                                                         "Aided", "Aided", "Insured", "Insured", "Insured",
@@ -524,35 +1002,67 @@ levels(encounters_first_hep_c_encounter$Fin_Class) <- c("Insured", "Insured", "A
 #Aided = combines Charity, Grants & Funds, Medicaid
 #Self payy = self pay
 
-patient_ID_insurance_aided <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[encounters_first_hep_c_encounter$Fin_Class == "Aided"]))
+patient_ID_insurance_aided <- data.frame(table(pts_encounters$PATIENT_ID[pts_encounters$Fin_Class == "Aided"]))
 colnames(patient_ID_insurance_aided) <-  c("PATIENT_ID", "InsuranceAidedCt")
 patient_ID_insurance_aided[,"InsuranceAidedCt"][is.na(patient_ID_insurance_aided[,"InsuranceAidedCt"])] <- 0
 
 patient_ID_insurance_aided$Insurance_Aided <- ifelse(patient_ID_insurance_aided$InsuranceAidedCt>0,"TRUE", "FALSE")
 patient_ID_insurance_aided <- patient_ID_insurance_aided[, c(1,3)] #remove count variable
-patients <- left_join(patients, patient_ID_insurance_aided)
-patients[,"Insurance_Aided"][is.na(patients[,"Insurance_Aided"])] <- "FALSE"
-patients$Insurance_Aided <- as.factor(patients$Insurance_Aided)
+encounter_variables <- left_join(encounter_variables, patient_ID_insurance_aided)
+encounter_variables[,"Insurance_Aided"][is.na(encounter_variables[,"Insurance_Aided"])] <- "FALSE"
+encounter_variables$Insurance_Aided <- as.factor(encounter_variables$Insurance_Aided)
 
 
 #Insurance_Gap - Was there a ever a NA or self Pay listed as Fin Class?
 ##TRUE = a NA or self pay was listed at least once?
 ##FALSE = a insurance policy was always listed?  might want to include charity or grant funded????
 ### ??????????  Lots of pts have a NA listed on encounters???  will some encounters type not list insurance list?
-patient_ID_insurancegap <- data.frame(table(encounters_first_hep_c_encounter$PATIENT_ID[(is.na(encounters_first_hep_c_encounter$Fin_Class)| encounters_first_hep_c_encounter$Fin_Class == "Self Pay")]))
+patient_ID_insurancegap <- data.frame(table(pts_encounters$PATIENT_ID[(is.na(pts_encounters$Fin_Class)| pts_encounters$Fin_Class == "Self Pay")]))
 colnames(patient_ID_insurancegap) <-  c("PATIENT_ID", "InsuranceGapCt")
 
 patient_ID_insurancegap$Insurance_Gap <- ifelse(patient_ID_insurancegap$InsuranceGap>0,"TRUE", "FALSE")
 patient_ID_insurancegap <- patient_ID_insurancegap[, c(1,3)] #remove count variable
-patients <- left_join(patients, patient_ID_insurancegap)
-patients[,"Insurance_Gap"][is.na(patients[,"Insurance_Gap"])] <- "FALSE"
-patients$Insurance_Gap <- as.factor(patients$Insurance_Gap)
+encounter_variables <- left_join(encounter_variables, patient_ID_insurancegap)
+encounter_variables[,"Insurance_Gap"][is.na(encounter_variables[,"Insurance_Gap"])] <- "FALSE"
+encounter_variables$Insurance_Gap <- as.factor(encounter_variables$Insurance_Gap)
 
-str(patients)
+names(encounter_variables)
 
-sum(is.na(patients))
+sum(is.na(encounter_variables))
+
+encounter_variables <- encounter_variables[,-c(2:5)]
+
+#export Encounter variables to flat file folder
+write.csv(encounter_variables, "Z:/Flat File/pts_encounters.csv", row.names = FALSE)
+  #Patient variables = 1
+  #Totals and Averages on Encounter Type = 2 - 12
+  #Average Encounter Type = 13 - 51
+  #Insurance = 52 - 53
+#FREQ was in baseline model
+
+
+#Join to flat file - Merge with patient info, demo variables, ICD variables, and Procedure variables
+flat_file <- left_join(flat_file, encounter_variables)
+str(flat_file)
+names(flat_file)
+  #Patient variables = 1-5
+  #Demographic variables = 6-12
+  #Freq HEDIS ICD codes = 13- 68
+  #Average HEDIS ICD codes = 69 - 124
+  #Binary HEDIS ICD codes = 125 - 180
+  #Average CCS ICD codes = 181 - 461
+  #Binary CCS ICD codes = 462 - 741
+  #Freq HEDIS PROC codes = 742 - 800
+  #Average HEDIS PROC codes = 801 - 859
+  #Binary HEDIS PROC codes = 860 - 918
+  #Totals and Averages on Encounter Type = 919 - 968
+  #Insurance = 969 - 970
 
 ```
+
+
+####################  Variables from American Community Survey Data ####################
+
 
 ```{r}
 #####  American Community survey Data ######
@@ -586,29 +1096,44 @@ pts_zip_ACS <- left_join(zip_updates, ACS, c("Most_Freq_Zip" = "Zip_Code_DID")) 
 dim(zip_updates)
 dim(pts_zip_ACS)
 sum(is.na(pts_zip_ACS))
-sum(is.na(pts_zip_ACS$Most_Freq_Zip))
-sum(is.na(pts_zip_ACS$Pct_No_Health_Insurance))
 str(pts_zip_ACS)
 
-
-patients <- left_join(patients, pts_zip_ACS) #join with other patient variables
-dim(pts_zip_ACS)
-dim(patients)
-sum(is.na(patients$Most_Freq_Zip))  #0 NA's - no zip code
-sum(is.na(patients$Pct_No_Health_Insurance)) #5 NA's - no ACS data
-
-str(patients[,1:75])
-str(patients[,76:150])
-str(patients[,151:175])
-
-names(patients)
-#remove zip code column
-patients <- patients[-c(132:133)]
-
 #remove NA's
-patients[,132:173][is.na(patients[,132:173])] <- 0 
-sum(is.na(patients))
+pts_zip_ACS[,2:ncol(pts_zip_ACS)][is.na(pts_zip_ACS[,2:ncol(pts_zip_ACS)])] <- 0 
+sum(is.na(pts_zip_ACS))
+
+#remove zip code columns
+pts_zip_ACS<- pts_zip_ACS[-c(2:3)]
+
+#export CCS icd variables to flat file folder
+write.csv(pts_zip_ACS, "Z:/Flat File/pts_zip_ACS.csv", row.names = FALSE)
+  #Patient variables = 1
+  #ACS Data = 2 - 43
+#all was in baseline model
+
+
+#Join to flat file - Merge with patient info, demo variables, and ICD variables
+flat_file <- left_join(flat_file, pts_zip_ACS)
+str(flat_file)
+names(flat_file)
+  #Patient variables = 1-5
+  #Demographic variables = 6-12
+  #Freq HEDIS ICD codes = 13- 68
+  #Average HEDIS ICD codes = 69 - 124
+  #Binary HEDIS ICD codes = 125 - 180
+  #Average CCS ICD codes = 181 - 461
+  #Binary CCS ICD codes = 462 - 741
+  #Freq HEDIS PROC codes = 742 - 800
+  #Average HEDIS PROC codes = 801 - 859
+  #Binary HEDIS PROC codes = 860 - 918
+  #Totals and Averages on Encounter Type = 919 - 968
+  #Insurance = 969 - 970
+  #ACS data = 971 - 1012
+
 ```
+
+
+####################  Variables from Social Table ####################
 
 
 ```{r}
@@ -631,7 +1156,7 @@ pts_social$BeforeorAfter <-ifelse(pts_social$First_Date_with_Hep_C_ICD_code=="99
 
 nrow(subset(pts_social, BeforeorAfter == 0))
 nrow(subset(pts_social, BeforeorAfter == 1))
-
+b
 pts_social <- subset(pts_social, BeforeorAfter == 1)
 #old_rows<-nrow(pts_social[1])
 #remove duplicated rows - no duplicates present
@@ -803,9 +1328,6 @@ while (i<=rows){
   }
 final_time-initial_time          
 
-#pts_social[60:150,66:74]
-
-
 
 #find max status of tobacco_user
 #change formatting of object to factor
@@ -820,15 +1342,15 @@ table(pts_max_status$TOBACCO_USER_STATUS_DER)
 
 
 #Add the variable to the patients table
-patients<-left_join(patients,pts_max_status, by = "PATIENT_ID")
-patients$TOBACCO_USER_STATUS_DER[is.na(patients$TOBACCO_USER_STATUS_DER)] <- "Unknown"
+social_variables<-left_join(patients,pts_max_status, by = "PATIENT_ID")
+social_variables$TOBACCO_USER_STATUS_DER[is.na(social_variables$TOBACCO_USER_STATUS_DER)] <- "Unknown"
 
 
 ### Intentsity of tobacco use
 pts_max_packs<-aggregate(TOBACCO_PAK_PER_DY~PATIENT_ID, data = pts_social,max)
 colnames(pts_max_packs) <- c("PATIENT_ID", "TOBACCO_PAK_PER_DAY")
-patients<-left_join(patients,pts_max_packs, by = "PATIENT_ID")
-patients$TOBACCO_PAK_PER_DAY[is.na(patients$TOBACCO_PAK_PER_DAY)] <- 0
+social_variables<-left_join(social_variables,pts_max_packs, by = "PATIENT_ID")
+social_variables$TOBACCO_PAK_PER_DAY[is.na(social_variables$TOBACCO_PAK_PER_DAY)] <- 0
 
 
 pts_social<-pts_social[order(-pts_social$TOBACCO_USER_STATUS_DER_ENC,pts_social$PATIENT_ID),]
@@ -838,9 +1360,9 @@ pts_social<-pts_social[order(-pts_social$TOBACCO_USER_STATUS_DER_ENC,pts_social$
 # number of years smoked
 pts_max_years<-aggregate(TOBACCO_USED_YEARS~PATIENT_ID, data = pts_social,max)
 colnames(pts_max_years) <- c("PATIENT_ID", "TOBACCO_USED_YEARS")
-patients<-left_join(patients,pts_max_years, by = "PATIENT_ID")
-patients$TOBACCO_USED_YEARS[is.na(patients$TOBACCO_USED_YEARS)] <- 0
-patients<-patients[,c(-6,-7)]
+social_variables<-left_join(social_variables,pts_max_years, by = "PATIENT_ID")
+social_variables$TOBACCO_USED_YEARS[is.na(social_variables$TOBACCO_USED_YEARS)] <- 0
+#patients<-patients[,c(-6,-7)]
 
 
 
@@ -870,8 +1392,8 @@ pts_social$ALCOHOL_USE_FCR <- as.numeric(as.character(pts_social$ALCOHOL_USE_FCR
 #alcohol usage
 pts_max_alc_use<-aggregate(ALCOHOL_USE_FCR~PATIENT_ID, data = pts_social,max)
 colnames(pts_max_alc_use) <- c("PATIENT_ID", "ALCOHOL_USE_FCR")
-patients<-left_join(patients,pts_max_alc_use, by = "PATIENT_ID")
-patients$ALCOHOL_USE_FCR[is.na(patients$ALCOHOL_USE_FCR)] <- 0
+social_variables<-left_join(social_variables,pts_max_alc_use, by = "PATIENT_ID")
+social_variables$ALCOHOL_USE_FCR[is.na(social_variables$ALCOHOL_USE_FCR)] <- 0
 
 
 ## Alcohol intensiy - ALCOHOL_OZ_PER_WK
@@ -879,8 +1401,8 @@ pts_social$ALCOHOL_OZ_PER_WK_FCR<-pts_social$ALCOHOL_OZ_PER_WK
 pts_social$ALCOHOL_OZ_PER_WK_FCR[is.na(pts_social$ALCOHOL_OZ_PER_WK_FCR)] <- 0
 pts_max_alc_oz<-aggregate(ALCOHOL_OZ_PER_WK_FCR~PATIENT_ID, data = pts_social,max)
 colnames(pts_max_alc_oz) <- c("PATIENT_ID", "ALCOHOL_OZ_PER_WK_FCR")
-patients<-left_join(patients,pts_max_alc_oz, by = "PATIENT_ID")
-patients$ALCOHOL_OZ_PER_WK_FCR[is.na(patients$ALCOHOL_OZ_PER_WK_FCR)] <- 0
+social_variables<-left_join(social_variables,pts_max_alc_oz, by = "PATIENT_ID")
+social_variables$ALCOHOL_OZ_PER_WK_FCR[is.na(social_variables$ALCOHOL_OZ_PER_WK_FCR)] <- 0
 
 
 
@@ -903,8 +1425,8 @@ pts_social$SEXUALLY_ACTIVE_FCR <- as.numeric(as.character(pts_social$SEXUALLY_AC
 #aggregate sexual activity to patient level
 pts_max_sex_active<-aggregate(SEXUALLY_ACTIVE_FCR~PATIENT_ID, data = pts_social,max)
 colnames(pts_max_sex_active) <- c("PATIENT_ID", "SEXUALLY_ACTIVE_FCR")
-patients<-left_join(patients,pts_max_sex_active, by = "PATIENT_ID")
-patients$SEXUALLY_ACTIVE_FCR[is.na(patients$SEXUALLY_ACTIVE_FCR)] <- 0
+social_variables<-left_join(social_variables,pts_max_sex_active, by = "PATIENT_ID")
+social_variables$SEXUALLY_ACTIVE_FCR[is.na(social_variables$SEXUALLY_ACTIVE_FCR)] <- 0
 
 #Recoding the SEX_ENC_TYPE - type of sexual encounter. If the patient has ever had homosexual activity. 
 #bring in the demographics table
@@ -936,9 +1458,9 @@ pts_social[100:200,c(1,75,40,41,86,87)]
 #if any homosexual axtivity has been recorded in the past, this variable is flagged HO.
 pts_max_sex_enc_type<-aggregate(sex_enc_type~PATIENT_ID, data = pts_social,max)
 colnames(pts_max_sex_enc_type) <- c("PATIENT_ID", "SEX_ENC_TYPE")
-patients<-left_join(patients,pts_max_sex_enc_type, by = "PATIENT_ID")
-patients$SEX_ENC_TYPE[is.na(patients$SEX_ENC_TYPE)] <- "U"
-patients$SEX_ENC_TYPE<-as.factor(patients$SEX_ENC_TYPE)
+social_variables<-left_join(social_variables,pts_max_sex_enc_type, by = "PATIENT_ID")
+social_variables$SEX_ENC_TYPE[is.na(social_variables$SEX_ENC_TYPE)] <- "U"
+social_variables$SEX_ENC_TYPE<-as.factor(social_variables$SEX_ENC_TYPE)
 
 #### Condom use
 # y = 2
@@ -958,8 +1480,8 @@ table(pts_social$CONDOM_YN_FCR)
 #aggregate sexual activity to patient level
 pts_max_condom_use<-aggregate(CONDOM_YN_FCR~PATIENT_ID, data = pts_social,max)
 colnames(pts_max_sex_active) <- c("PATIENT_ID", "CONDOM_YN_FCR")
-patients<-left_join(patients,pts_max_sex_active, by = "PATIENT_ID")
-patients$CONDOM_YN_FCR[is.na(patients$CONDOM_YN_FCR)] <- 0
+social_variables<-left_join(social_variables,pts_max_sex_active, by = "PATIENT_ID")
+social_variables$CONDOM_YN_FCR[is.na(social_variables$CONDOM_YN_FCR)] <- 0
 
 
 ##### Occupation#####
@@ -970,197 +1492,133 @@ pts_social$OCCUPATION_FCR<-pts_social$OCCUPATION
 
 occupations<-data.frame(table(pts_social$OCCUPATION))
 
+#remove NA's
+sum(is.na(social_variables))
+
+#export social variables to flat file folder
+write.csv(social_variables, "Z:/Flat File/pts_social.csv", row.names = FALSE)
+  #Patient variables = 1
+  #Social = 2 - 7
+#all was in baseline model
+
+
+#Join to flat file - Merge with patient info, demo variables, ICD variables, procedure variables, encounter variables, and ACS variable
+flat_file <- left_join(flat_file, social_variables)
+str(flat_file)
+names
+  #Patient variables = 1-5
+  #Demographic variables = 6-12
+  #Freq HEDIS ICD codes = 13- 68
+  #Average HEDIS ICD codes = 69 - 124
+  #Binary HEDIS ICD codes = 125 - 180
+  #Average CCS ICD codes = 181 - 461
+  #Binary CCS ICD codes = 462 - 741
+  #Freq HEDIS PROC codes = 742 - 800
+  #Average HEDIS PROC codes = 801 - 859
+  #Binary HEDIS PROC codes = 860 - 918
+  #Totals and Averages on Encounter Type = 919 - 968
+  #Insurance = 969 - 970
+  #ACS data = 971 - 1012
+  #Social = 1013 - 1020 
+
 
 ```
+
+  ###########  Variables from Med Input and Med Output Table###########
+  
+  
+```{r}
+####  Med Variables ####
+names(meds_inpt)
+names(meds_outpt)
+reduced_meds_inpt <- meds_inpt[c(1, 4, 9)]
+colnames(reduced_meds_inpt) <- c("PATIENT_ID", "DATE", "Thera_Class")
+reduced_meds_outpt <- meds_outpt[c(1, 4, 8)]
+colnames(reduced_meds_outpt) <- c("PATIENT_ID", "DATE", "Thera_Class")
+
+pts_meds_inpt <- inner_join(reduced_meds_inpt,patients) #20,671,583  rows
+pts_meds_outpt <- inner_join(reduced_meds_outpt,patients) #2,581,021 rows
+dim(pts_meds)
+pts_meds <- rbind(pts_meds_inpt, pts_meds_outpt) #23,252,604 rows
+
+##TRUE = Order of Med was before first Hep C icd code
+##FALSE = ORder fo Med was NOT before first Hep C icd code
+pts_meds$before_diagnosis <- ifelse(pts_meds$DATE < pts_meds$First_Date_with_Hep_C_ICD_code, "TRUE", "FALSE") #Evaluate whether encounter was before or after first Hep C icd code date
+pts_meds <- pts_meds[(pts_meds$before_diagnosis=="TRUE"),]  #Remove "False" #22,364,094 rosw
+dim(pts_meds)
+
+
+#Total_Num_of_Med_by_Pharmacy
+med_type_freq_table <- as.data.frame.matrix(table(pts_meds$PATIENT_ID, pts_meds$Thera_Class))
+med_type_freq_table$PATIENT_ID <- rownames(med_type_freq_table) #Create a column for PATIENT_ID
+med_type_freq_table <- med_type_freq_table[c(48, 1:47)]#move PATIENT_ID column to columns 1
+rownames(med_type_freq_table) <- NULL#Remove row names from data.frame
+#rename column names
+colnames(med_type_freq_table)[2:48] <- paste("FREQ_MED", colnames(med_type_freq_table[,c(2:48)]), sep = "_")
+names(med_type_freq_table)
+
+#add back information on observation period
+med_type_table <- left_join(patients, med_type_freq_table)
+names(med_type_table)
+
+#Divide Freq by length of observtion period (in years) to calculate average number per observation perios
+med_type_table[,53:99] <- apply(med_type_table[,6:52], 2, function (x) {
+          x/med_type_table$Observe_period_yrs})
+
+#Rename Average columns
+med_type_newnames <- (gsub('FREQ_', "AVERAGE_", colnames(med_type_table[,6:54])))
+colnames(med_type_table)[53:99] <- paste(med_type_newnames)     
+
+#eliminiate FREQ variables
+med_variables <- med_type_table[c(1, 53:99)]
+
+#replace NA's with zeros
+med_variables[,2:ncol(med_variables)][is.na(med_variables[,2:ncol(med_variables)])] <- 0
+sum(is.na(med_variables))
+
+colSums(med_variables[,2:ncol(med_variables)])
+
+#export med variables to flat file folder
+write.csv(med_variables, "Z:/Flat File/pts_meds.csv", row.names = FALSE)
+  #Patient variables = 1
+  #Med Class = 2 - 47
+#all was in baseline model
+
+
+#Join to flat file - Merge with patient info, demo variables, ICD variables, procedure variables, encounter variables, ACS variable, and social 
+flat_file <- left_join(flat_file, med_variables)
+str(flat_file[,1020:1067])
+dim(flat_file)
+
+  #Patient variables = 1-5
+  #Demographic variables = 6-12
+  #Freq HEDIS ICD codes = 13- 68
+  #Average HEDIS ICD codes = 69 - 124
+  #Binary HEDIS ICD codes = 125 - 180
+  #Average CCS ICD codes = 181 - 461
+  #Binary CCS ICD codes = 462 - 741
+  #Freq HEDIS PROC codes = 742 - 800
+  #Average HEDIS PROC codes = 801 - 859
+  #Binary HEDIS PROC codes = 860 - 918
+  #Totals and Averages on Encounter Type = 919 - 968
+  #Insurance = 969 - 970
+  #ACS data = 971 - 1012
+  #Social = 1013 - 1020 
+  #Meds = 1021 - 1067
+
+```
+
 
 ```{r}
 #####  Double Check flat File & Export
 
-sum(is.na(patients))  # should be zero NA's
-#26258
-dim(patients)  #232661   179
-str(patients)
-names(patients)
+sum(is.na(flat_file))  # should be zero NA's
 
-
-write.csv(patients, "Z:/Flat File/patients_HEDIS_20170816file.csv")
-```
-
-```{r}
-
-### CCS categories ####
-
-###  Import CCS  9 categories  ####
-
-ccs_9 <- read.csv("Z:/Value Sets/CCSCategoryNames_ICD9.csv", header = TRUE, stringsAsFactor = FALSE)
-
-#Formatting CCS file
-ccs_9$X.ICD.9.CM.CODE. <- sub(".$", "", ccs_9$X.ICD.9.CM.CODE.)#remove last character in string
-ccs_9$X.ICD.9.CM.CODE. <- sub("^.", "", ccs_9$X.ICD.9.CM.CODE.)#remove first character in string
-
-ccs_9$X.ICD.9.CM.CODE. <- trimws(ccs_9$X.ICD.9.CM.CODE., which = c("right")) #remove extra spaces
-ccs_9$X.ICD.9.CM.CODE. <- str_pad(ccs_9$X.ICD.9.CM.CODE., 5, "right", pad = "0") #add zeros at the end
-
-ccs_9 <- ccs_9 [c("X.ICD.9.CM.CODE.",  "CCS.CATEGORY", "X.CCS.CATEGORY.DESCRIPTION.")]
-colnames(ccs_9) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
-ccs_9 <- ccs_9[!duplicated(ccs_9$Code),]
-str(ccs_9)
-
-###  Import CCS  10 categories  ####
-
-ccs_10 <- read.csv("Z:/Value Sets/ccs_dx_icd10cm_2017.csv", header = TRUE, stringsAsFactor = FALSE)
-
-#Formatting CCS file
-ccs_10$X.ICD.10.CM.CODE. <- sub(".$", "", ccs_10$X.ICD.10.CM.CODE.)#remove last character in string
-ccs_10$X.ICD.10.CM.CODE. <- sub("^.", "", ccs_10$X.ICD.10.CM.CODE.)#remove first character in string
-
-ccs_10$X.CCS.CATEGORY. <- sub(".$", "", ccs_10$X.CCS.CATEGORY.)#remove last character in string
-ccs_10$X.CCS.CATEGORY. <- sub("^.", "", ccs_10$X.CCS.CATEGORY.)#remove first character in string
-
-ccs_10 <- ccs_10 [c("X.ICD.10.CM.CODE.",  "X.CCS.CATEGORY.", "X.CCS.CATEGORY.DESCRIPTION.")]
-colnames(ccs_10) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
-str(ccs_10)
-```
-
-
-
-```{r}
-#### icd Diagnosis table - ICD Codes ####
-#### Map ICD codes to CCS categories  ###########
-
-reduced_diagnosis_icd <- diagnosis_icd[c("PATIENT_ID", "enc_dt_ds", "icd_dx", "ICD_TYPE", "icd_diagnosis")]
-colnames(reduced_diagnosis_icd) <- c("PATIENT_ID", "Date", "Code", "Type", "Desc")
-
-### ICD 9 ###
-reduced_diagnosis_icd_9 <- subset(reduced_diagnosis_icd, Type == "9") #8,016,285
-reduced_diagnosis_icd_9 <- reduced_diagnosis_icd_9[,-4]
-
-reduced_diagnosis_icd_9$Code <- gsub("\\.", "", reduced_diagnosis_icd_9$Code) #remove decimal point
-reduced_diagnosis_icd_9$Code <- str_pad(reduced_diagnosis_icd_9$Code, 5, "right", pad = "0") #pad so all codes are 4 characters long
-
-#join icd 9 codes from diagnosis table to ccs categories
-icd_9_codes_ccs <- inner_join(reduced_diagnosis_icd_9, ccs_9)
-dim(icd_9_codes_ccs) #8,016,284
-dim(reduced_diagnosis_icd_9)  #8,016,285
-dim(ccs_9)  #14800
-
-### ICD 10 ###
-reduced_diagnosis_icd_10 <- subset(reduced_diagnosis_icd, Type == "10") #520,609
-reduced_diagnosis_icd_10 <- reduced_diagnosis_icd_10[,-4]
-
-#join icd 10 codes from diagnosis table to ccs categories
-icd_10_codes_ccs <- inner_join(reduced_diagnosis_icd_10, ccs_10)
-dim(icd_10_codes_ccs) #512,891
-dim(reduced_diagnosis_icd_10) #520,609
-dim(ccs_10) #71807
-
-icd_codes_css <- rbind(icd_9_codes_ccs, icd_10_codes_ccs)
-str(icd_codes_css)
-
-```
-
-
-```{r}
-## Format ucpg table
-#extract each icd rank and recombine them to one dataset
-
-#reduced_cpt_ucpg_1 <- cpt_ucpg[c("PATIENT_ID", "Date" = "Date_of_Service_DS", "ICD9_CM_CODE_1")]
-#colnames(reduced_cpt_ucpg_1) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_2 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_2")]
-#colnames(reduced_cpt_ucpg_2) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_3 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_3")]
-#colnames(reduced_cpt_ucpg_3) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_4 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_4")]
-#colnames(reduced_cpt_ucpg_4) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_5 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_5")]
-#colnames(reduced_cpt_ucpg_5) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_6 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_6")]
-#colnames(reduced_cpt_ucpg_6) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_7 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_7")]
-#colnames(reduced_cpt_ucpg_7) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_8 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_8")]
-#colnames(reduced_cpt_ucpg_8) <- c("PATIENT_ID", "Date", "Code")
-#reduced_cpt_ucpg_9 <- cpt_ucpg[c("PATIENT_ID", "Date_of_Service_DS", "ICD9_CM_CODE_9")]
-#colnames(reduced_cpt_ucpg_9) <- c("PATIENT_ID", "Date", "Code")
-
-#reduced_cpt_ucpg <- rbind(reduced_cpt_ucpg_1, reduced_cpt_ucpg_2, reduced_cpt_ucpg_3, reduced_cpt_ucpg_4, reduced_cpt_ucpg_5, reduced_cpt_ucpg_6, reduced_cpt_ucpg_7, reduced_cpt_ucpg_8, reduced_cpt_ucpg_9)
-
-#reduced_cpt_ucpg <- reduced_cpt_ucpg[!is.na(reduced_cpt_ucpg$Code),]
-
-#reduced_cpt_ucpg$Code <- gsub("\\.", "", reduced_cpt_ucpg$Code) #remove decimal point
-#reduced_cpt_ucpg$Code <- str_pad(reduced_cpt_ucpg$Code, 5, "right", pad = "0") #pad so all codes are 4 characters long
-#modified_diagnosis_icd$Code <-as.factor(modified_diagnosis_icd$Code) #chanage to a factor
-
-#cpt_ucpg_codes_css <- left_join(reduced_cpt_ucpg, ccs)
-#dim(cpt_ucpg_codes_css)
-#dim(join)
-#dim(ccs)
-
-##evaluatign join
-#sum(is.na(join$CCS_CATEGORY))  #26812 = na's for 9; #369552 = na's for 10
-
-##Add icd codes from cpt_ucpg table to diagnosis table
-#icd_codes_css <- rbind(icd_codes_css, reduced_cpt_ucpg)
-#str(icd_codes_css)
-```
-
-```{r}
-## Reduce icd codes with ccs catgories to only patients in our cohort ###
-pts_diagnosis <- inner_join(patients, icd_codes_css) 
-dim(pts_diagnosis) #8,456,100
-dim(patients) #283,661
-dim(icd_codes_css) #8,529,175 
-
-
-#identify which observations occurred after First_Date_with_Hep_C_ICD_code
-pts_diagnosis$BeforeorAfter <- ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code < pts_diagnosis$Date, "After", 
-                                      ifelse(pts_diagnosis$First_Date_with_Hep_C_ICD_code == pts_diagnosis$Date, "Same", "Before"))
-
-#include observations that occurred before first Hep C diagnosis only
-pts_diagnosis <- pts_diagnosis[(pts_diagnosis$BeforeorAfter == "Before"),] #8,099,653
-str(pts_diagnosis) #8,232,623
-
-
-
-#Create table with frequency of ccs categories
-ccs_freq_table <- as.data.frame.matrix(table(pts_diagnosis$PATIENT_ID, pts_diagnosis$CCS_CATEGORY))
-str(ccs_freq_table)
-
-ccs_freq_table$PATIENT_ID <- rownames(ccs_freq_table)  #Create a column for PATIENT_ID
-ccs_freq_table <- ccs_freq_table[c(282, 1:281)] #move PATIENT_ID column to columns 1
-colnames(ccs_freq_table)[2:282] <- paste("FREQ_ICD_CCS", colnames(ccs_freq_table[,c(2:282)]), sep = "_")#rename column names to icd_code_freq for columns 2:282
-rownames(ccs_freq_table) <- NULL#Remove row names from data.frame
-
-
-#join back with patients id's that were lost; 
-patients <- left_join(patients, ccs_freq_table)
-str(patients)
-
-# chanage NA's to zeros
-patients[,180:460][is.na(patients[,180:460])] <- 0  
-
-sum(is.na(patients))
-
-#Demographic variables = 4-7
-#ICD codes grouped by HEDIS value sets = 8-63
-#CPT codes by HEDIS value sets = 64-122
-#Encounter variables = 123-129
-#ACS variables = 130-171
-#Social variables = 172-179
-#ICD grouped by CCS variables = 180-460
-```
-
-```{r}
-#####  Double Check flat File & Export
-
-sum(is.na(patients))  # should be zero NA's
-
-dim(patients)  #232661   460
-str(patients)
-names(patients)
-
-
-write.csv(patients, "Z:/Flat File/patients_HEDIS_and_CCS_20170816file.csv")
+dim(flat_file)  #232661   460
+str(flat_file[1:150])
+str(flat_file[151:300])
+names(flat_file)
+write.csv(flat_file, "Z:/Flat File/patients_all_variables_09-07-2017.csv", row.names = FALSE)
 ```
 
 ```{r}
@@ -1196,6 +1654,8 @@ str(cpt_CCS)
 
 
 ```
+
+
 ```{r}
 ####  COMBINE codes from cpt and cpt_ucpg ###
 
@@ -1227,3 +1687,4 @@ str(cpt_codes_ccs)
 sum(is.na(cpt_codes_ccs$CCS))
 
 subset(cpt_codes_ccs, !(is.na(CCS)))
+```
