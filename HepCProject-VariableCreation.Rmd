@@ -861,9 +861,11 @@ dim(pts_encounters)
 patient_ID_encounters<-data.frame(table(pts_encounters$PATIENT_ID))
 colnames(patient_ID_encounters) <-  c("PATIENT_ID", "Total_Num_Encounters")
 encounter_variables <- left_join(patients,patient_ID_encounters)
-#Avg_Num_Encounters_Month
+#Avg_Num_Encounters_Yr
 encounter_variables$Avg_Num_Encounters_yr <- encounter_variables$Total_Num_Encounters / encounter_variables$Observe_period_yrs
 
+
+##Outpatient 
 #Total_Num_Outpt_Encounters
 patient_ID_encounters_outpt <- data.frame(table(pts_encounters$PATIENT_ID[pts_encounters$Enc_EIO %in% c("O", "I, O", "E, O", "E, I, O")]))
 colnames(patient_ID_encounters_outpt) <-  c("PATIENT_ID", "Total_Num_Outpt_Encounters")
@@ -873,7 +875,7 @@ encounter_variables$Avg_Num_Outpt_Encounters_yr <- encounter_variables$Total_Num
 
 
 
-##Inpatient Visits
+##Inpatient 
 #Total_Num_Inpt_Encounters
 patient_ID_encounters_inpt <- data.frame(table(pts_encounters$PATIENT_ID[pts_encounters$Enc_EIO %in% c("I", "I, O", "E, I, O", "E, I")]))
 colnames(patient_ID_encounters_inpt) <-  c("PATIENT_ID", "Total_Num_Inpt_Encounters")
@@ -895,7 +897,7 @@ encounter_variables <- left_join(encounter_variables,patient_ID_Inpt_Admits)
 encounter_variables$Avg_Num_Inpt_Admits_yr <- encounter_variables$Total_Num_Inpt_Admits / encounter_variables$Observe_period_yrs
 
 
-###ED visits
+###ED 
 #Total_Num_ED_Encounters
 patient_ID_encounters_ED <- data.frame(table(pts_encounters$PATIENT_ID[pts_encounters$Enc_EIO %in% c("E, I", "E", "E, I, O", "E, O")]))
 colnames(patient_ID_encounters_ED) <-  c("PATIENT_ID", "Total_Num_ED_Encounters")
@@ -911,7 +913,7 @@ patient_ID_ED_visits <- patient_ID_ED_visits[,-c(2)]
 colnames(patient_ID_ED_visits) <-  c("PATIENT_ID", "Total_Num_ED_Visits")
 encounter_variables <- left_join(encounter_variables,patient_ID_ED_visits)
 encounter_variables$Avg_Num_ED_Visits_yr <- encounter_variables$Total_Num_ED_Visits / encounter_variables$Observe_period_yrs
-encounter_variables <- encounter_variables[-c(15)]
+encounter_variables <- encounter_variables[-c(17)]
 
 ##Billabe Encounters
 #Total_Num_of_Encounters_by_billable_type
@@ -933,7 +935,7 @@ encounter_variables <- left_join(encounter_variables, enc_billable_freq_table)
 
 #Divide Freq by length of observtion period (in years) to calculate average number per observation perios
 encounter_variables$Avg_Num_Billable_Enc_yr <- encounter_variables$Total_Num_Billable_Enc / encounter_variables$Observe_period_yrs
-encounter_variables <- encounter_variables[-c(16)]
+encounter_variables <- encounter_variables[-c(18)]
 
 
 
@@ -943,7 +945,7 @@ enc_type_freq_table$PATIENT_ID <- rownames(enc_type_freq_table) #Create a column
 enc_type_freq_table <- enc_type_freq_table[c(50, 1:49)]#move PATIENT_ID column to columns 1
 rownames(enc_type_freq_table) <- NULL#Remove row names from data.frame
 #rename column names
-colnames(enc_type_freq_table)[6:54] <- paste("FREQ_ENC_TYPE", colnames(enc_type_freq_table[,c(6:54)]), sep = "_")
+colnames(enc_type_freq_table)[2:50] <- paste("FREQ_ENC_TYPE", colnames(enc_type_freq_table[,c(2:50)]), sep = "_")
 names(enc_type_freq_table)
 table(pts_encounters$Enc_Type_c)
 
@@ -968,12 +970,12 @@ names(encounter_variables)
 
 #replace NA's with zeros
 encounter_variables[,6:ncol(encounter_variables)][is.na(encounter_variables[,6:ncol(encounter_variables)])] <- 0
-
+sum(is.na(encounter_variables))
 
 #some columsn with very low numbers???????/
-colSums(encounter_variables[6:ncol(encounter_variables)])
+#colSums(encounter_variables[6:ncol(encounter_variables)])
 
-encounter_variables <- encounter_variables[,-c(18, 21, 29, 30, 32, 33, 35, 36, 44, 55)]
+#encounter_variables <- encounter_variables[,-c(18, 21, 29, 30, 32, 33, 35, 36, 44, 55)]
 
 ```
 
@@ -1055,8 +1057,8 @@ names(flat_file)
   #Freq HEDIS PROC codes = 742 - 800
   #Average HEDIS PROC codes = 801 - 859
   #Binary HEDIS PROC codes = 860 - 918
-  #Totals and Averages on Encounter Type = 919 - 968
-  #Insurance = 969 - 970
+  #Totals and Averages on Encounter Type = 919 - 980
+  #Insurance = 981 - 982
 
 ```
 
@@ -1114,7 +1116,7 @@ write.csv(pts_zip_ACS, "Z:/Flat File/pts_zip_ACS.csv", row.names = FALSE)
 
 #Join to flat file - Merge with patient info, demo variables, and ICD variables
 flat_file <- left_join(flat_file, pts_zip_ACS)
-str(flat_file)
+dim(flat_file)
 names(flat_file)
   #Patient variables = 1-5
   #Demographic variables = 6-12
@@ -1126,9 +1128,9 @@ names(flat_file)
   #Freq HEDIS PROC codes = 742 - 800
   #Average HEDIS PROC codes = 801 - 859
   #Binary HEDIS PROC codes = 860 - 918
-  #Totals and Averages on Encounter Type = 919 - 968
-  #Insurance = 969 - 970
-  #ACS data = 971 - 1012
+  #Totals and Averages on Encounter Type = 919 - 980
+  #Insurance = 981 - 982
+  #ACS data = 983 - 1024
 
 ```
 
@@ -1504,7 +1506,8 @@ write.csv(social_variables, "Z:/Flat File/pts_social.csv", row.names = FALSE)
 
 #Join to flat file - Merge with patient info, demo variables, ICD variables, procedure variables, encounter variables, and ACS variable
 flat_file <- left_join(flat_file, social_variables)
-str(flat_file)
+str(flat_file[,1025:1032])
+dim(flat_file)
 names
   #Patient variables = 1-5
   #Demographic variables = 6-12
@@ -1516,10 +1519,11 @@ names
   #Freq HEDIS PROC codes = 742 - 800
   #Average HEDIS PROC codes = 801 - 859
   #Binary HEDIS PROC codes = 860 - 918
-  #Totals and Averages on Encounter Type = 919 - 968
-  #Insurance = 969 - 970
-  #ACS data = 971 - 1012
-  #Social = 1013 - 1020 
+  #Totals and Averages on Encounter Type = 919 - 980
+  #Insurance = 981 - 982
+  #ACS data = 983 - 1024
+  #Social = 1025 - 1032
+
 
 
 ```
@@ -1587,7 +1591,7 @@ write.csv(med_variables, "Z:/Flat File/pts_meds.csv", row.names = FALSE)
 
 #Join to flat file - Merge with patient info, demo variables, ICD variables, procedure variables, encounter variables, ACS variable, and social 
 flat_file <- left_join(flat_file, med_variables)
-str(flat_file[,1020:1067])
+str(flat_file[,1033:1079])
 dim(flat_file)
 
   #Patient variables = 1-5
@@ -1600,11 +1604,11 @@ dim(flat_file)
   #Freq HEDIS PROC codes = 742 - 800
   #Average HEDIS PROC codes = 801 - 859
   #Binary HEDIS PROC codes = 860 - 918
-  #Totals and Averages on Encounter Type = 919 - 968
-  #Insurance = 969 - 970
-  #ACS data = 971 - 1012
-  #Social = 1013 - 1020 
-  #Meds = 1021 - 1067
+  #Totals and Averages on Encounter Type = 919 - 980
+  #Insurance = 981 - 982
+  #ACS data = 983 - 1024
+  #Social = 1025 - 1032
+  #Meds = 1033 - 1079
 
 ```
 
@@ -1612,9 +1616,9 @@ dim(flat_file)
 ```{r}
 #####  Double Check flat File & Export
 
-sum(is.na(flat_file))  # should be zero NA's
+sum(is.na(flat_file))  # should be zero NA's 
 
-dim(flat_file)  #232661   460
+dim(flat_file)  #232661   1079
 str(flat_file[1:150])
 str(flat_file[151:300])
 names(flat_file)
