@@ -168,6 +168,16 @@ str(patients) #283661 patients
 #export to flat file folder
 #write.csv(patients, "Z:/Flat File/patients_list.csv", row.names = FALSE)
 
+#exploratory analysis
+
+#table(patients$HCV_STATUS)
+
+#pos <- subset(patients, HCV_STATUS == 1)
+#neg <- subset(patients, HCV_STATUS == 0)
+
+#sum(pos$Observe_period_yrs)
+#sum(neg$Observe_period_yrs)
+
 ```
 
 
@@ -194,12 +204,12 @@ dim(demo)
 #Silent - Born 1945 and before
 
 
-pts_demo$GENERATION_CATEGORY <- ifelse(pts_demo$DOB_DS < 1945/01/01, "Silent",
-                                ifelse(pts_demo$DOB_DS >= 1945/01/01 & pts_demo$DOB_DS < 1964/01/01,"Baby Boomer",
-                                ifelse(pts_demo$DOB_DS >= 1964/01/01 & pts_demo$DOB_DS <1980/01/01, "Gen X",
-                                ifelse(pts_demo$DOB_DS >= 1980/01/01, "Millennial", "Unknown"))))
+pts_demo$GENERATION_CATEGORY <- ifelse(pts_demo$DOB_DS < "1945/01/01", "Silent",
+                                ifelse(pts_demo$DOB_DS >= "1945/01/01" & pts_demo$DOB_DS < "1964/01/01","Baby Boomer",
+                                ifelse(pts_demo$DOB_DS >=" 1964/01/01" & pts_demo$DOB_DS < "1980/01/01", "Gen X",
+                                ifelse(pts_demo$DOB_DS >= "1980/01/01", "Millennial", "Unknown"))))
 pts_demo$GENERATION_CATEGORY <- as.factor(pts_demo$GENERATION_CATEGORY)
-
+table(pts_demo$HCV_STATUS, pts_demo$GENERATION_CATEGORY)
 
 #Binned in 5 year catorgies ##
 library(eeptools)
@@ -220,6 +230,9 @@ pts_demo$AGE_CATEGORY <- ifelse(pts_demo$AGE <=24, "<25",
                                 ifelse(pts_demo$AGE >= 75 & pts_demo$AGE <=79, "75-79",
                                 ifelse(pts_demo$AGE >= 80, "80+", "Unknown")))))))))))))       
 pts_demo$AGE_CATEGORY <- as.factor(pts_demo$AGE_CATEGORY) #changing data strcture to factor
+
+#mean(pts_demo$AGE[pts_demo$HCV_STATUS == 0])
+#table(pts_demo$HCV_STATUS, pts_demo$AGE_CATEGORY)
 
 ## reduce columans
 pts_demo <- pts_demo[,c( "PATIENT_ID", "Gender", "Race", "Ethnicity", "language", "Marital_Status", "AGE_CATEGORY", "GENERATION_CATEGORY")] #reducing down the columns
@@ -273,6 +286,34 @@ str(flat_file)
 #Patient variables = 1-5
 #Demographic variables = 6-12
 
+
+##EXploratory Analysis
+table(flat_file$HCV_STATUS, flat_file$GENDER)
+prop.table(table(flat_file$HCV_STATUS, flat_file$GENDER))
+
+table(flat_file$HCV_STATUS, flat_file$RACE)
+unique(flat_file$RACE)
+prop.table(table(flat_file$HCV_STATUS, flat_file$RACE))
+
+table(flat_file$HCV_STATUS, flat_file$ETHNICITY)
+unique(flat_file$ETHNICITY)
+prop.table(table(flat_file$HCV_STATUS, flat_file$ETHNICITY))
+
+table(flat_file$HCV_STATUS, flat_file$LANGUAGE)
+unique(flat_file$LANGUAGE)
+prop.table(table(flat_file$HCV_STATUS, flat_file$LANGUAGE))
+
+table(flat_file$HCV_STATUS, flat_file$MARITAL_STATUS)
+unique(flat_file$MARITAL_STATUS)
+prop.table(table(flat_file$HCV_STATUS, flat_file$MARITAL_STATUS))
+
+table(flat_file$HCV_STATUS, flat_file$AGE_CATEGORY)
+unique(flat_file$AGE_CATEGORY)
+prop.table(table(flat_file$HCV_STATUS, flat_file$AGE_CATEGORY))
+
+table(flat_file$HCV_STATUS, flat_file$GENERATION_CATEGORY)
+unique(flat_file$GENERATION_CATEGORY)
+prop.table(table(flat_file$HCV_STATUS, flat_file$GENERATION_CATEGORY))
 ```
 
 
@@ -491,6 +532,15 @@ names(flat_file)
   #Freq HEDIS ICD codes = 13- 68
   #Average HEDIS ICD codes = 69 - 124
   #Binary HEDIS ICD codes = 125 - 180
+
+#Exploratory Analysis
+
+#post <- subset(flat_file, HCV_STATUS == 1)
+#pos_pts_icd <- as.data.frame(colSums(post[c(125:180)],))
+#write.csv(pos_pts_icd, "Z:/Flat File/FREQ_HEDIS_ICD.csv", row.names = FALSE)
+#neg <- subset(flat_file, HCV_STATUS == 0)
+#neg_pts_icd <- as.data.frame(colSums(neg[c(125:180)],))
+#write.csv(neg_pts_icd, "Z:/Flat File/Neg_FREQ_HEDIS_ICD.csv", row.names = FALSE)
 ```
 
 ```{r}
@@ -512,6 +562,7 @@ ccs_9 <- ccs_9 [c("X.ICD.9.CM.CODE.",  "CCS.CATEGORY", "X.CCS.CATEGORY.DESCRIPTI
 colnames(ccs_9) <- c("Code", "CCS_CATEGORY", "CCS_DESC")
 ccs_9 <- ccs_9[!duplicated(ccs_9$Code),]
 str(ccs_9)
+subset(ccs_9, CCS_CATEGORY == 2602)
 
 ###  Import CCS  10 categories  ####
 
@@ -643,6 +694,14 @@ ccs_table <- left_join(patients, ccs_freq_table)
 str(ccs_table)
 names(ccs_table)
 
+#Exploratory Analysis
+
+#post <- subset(ccs_table, HCV_STATUS == 1)
+#pos_pts_icd <- as.data.frame(colSums(post[c(6:286)], na.rm=TRUE))
+#write.csv(pos_pts_icd, "Z:/Flat File/FREQ_HEDIS_ICD.csv", row.names = FALSE)
+#neg <- subset(ccs_table, HCV_STATUS == 0)
+#neg_pts_icd <- as.data.frame(colSums(neg[c(6:286)], na.rm=TRUE))
+#write.csv(neg_pts_icd, "Z:/Flat File/Neg_FREQ_HEDIS_ICD.csv", row.names = FALSE)
 
 #Divide Freq by length of observtion period (in years) to calculate average numbe per observation perios
 
@@ -692,6 +751,16 @@ str(flat_file)
   #Binary HEDIS ICD codes = 125 - 180
   #Average CCS ICD codes = 181 - 461
   #Binary CCS ICD codes = 462 - 741
+
+
+#Exploratory Analysis
+
+#post <- subset(flat_file, HCV_STATUS == 1)
+#pos_pts_icd <- as.data.frame(colSums(post[c(462:741)], na.rm=TRUE))
+#write.csv(pos_pts_icd, "Z:/Flat File/FREQ_HEDIS_ICD.csv", row.names = FALSE)
+#neg <- subset(flat_file, HCV_STATUS == 0)
+#neg_pts_icd <- as.data.frame(colSums(neg[c(462:741)], na.rm=TRUE))
+#write.csv(neg_pts_icd, "Z:/Flat File/Neg_FREQ_HEDIS_ICD.csv", row.names = FALSE)
 ```
 
 
